@@ -4,7 +4,13 @@ import { CalendarDays, Users, ClipboardList, CheckCircle2, ChevronLeft, ChevronR
 import { supabase } from './lib/supabase';
 import uehLogo from './images/UEH.jpg';
 const SHIFTS = ['Sáng', 'Chiều', 'Tối'];
-const STUDENTS = ['Nguyễn Xuân Quang', 'Trần Lư Vĩ Tài', 'Đoàn Thu Hằng', 'Nguyễn Thành Khánh Hưng', 'Vũ Hải Đăng', 'Thái Hùng', 'Nguyễn Hải Hào', 'Phạm Hoàng Lan Phương', 'Ngô Việt Ngân', 'Lý Gia Hân', 'Phạm Thanh Nguyên', 'Võ Thị Tố Nga', 'Ngô Thùy Dương', 'Nguyễn Hồ Uyên Thư', 'Phạm Thị Trúc Đào', 'Nguyễn Phú Hội', 'Đỗ Thị Hồng Ngọc', 'Nguyễn Văn Gia Khánh', 'Dương Song Huy', 'Lê Hoàng Thảo Linh'];
+const STUDENTS = [
+    'Nguyễn Xuân Quang', 'Trần Lư Vĩ Tài', 'Đoàn Thu Hằng', 'Nguyễn Thành Khánh Hưng',
+    'Vũ Hải Đăng', 'Thái Hùng', 'Nguyễn Hải Hào', 'Phạm Hoàng Lan Phương',
+    'Ngô Việt Ngân', 'Lý Gia Hân', 'Phạm Thanh Nguyên', 'Võ Thị Tố Nga',
+    'Ngô Thùy Dương', 'Nguyễn Hồ Uyên Thư', 'Phạm Thị Trúc Đào', 'Nguyễn Phú Hội',
+    'Đỗ Thị Hồng Ngọc', 'Nguyễn Văn Gia Khánh', 'Dương Song Huy', 'Lê Hoàng Thảo Linh'
+];
 const initial = {
     availability: {},
     assignments: {},
@@ -176,94 +182,66 @@ export default function App() {
         });
         setNotice('Đã cập nhật phân công. Tháng này cần công bố lại.');
     };
-    // Đề xuất phân công: cân bằng tỷ lệ trong nhóm thành viên có số buổi rảnh tương đương.
+    // Đề xuất phân công tự động.
+    // Đề xuất phân công: làm lại tháng đang chọn, cân bằng tỷ lệ phân công.
     const suggest = () => {
         const n = structuredClone(data);
-        const counts = Object.fromEntries(STUDENTS.map((s) => [s, 0]));
-        const availabilityCounts = Object.fromEntries(STUDENTS.map((s) => [s, 0]));
-        const lastAssigned = Object.fromEntries(STUDENTS.map((s) => [s, -1]));
+        const availabilityCounts = Object.fromEntries(STUDENTS.map((name) => [name, 0]));
+        const assignedCounts = Object.fromEntries(STUDENTS.map((name) => [name, 0]));
 
-        // Tính số ca được giao và số buổi rảnh trong riêng tháng đang chọn.
-        days.forEach((day, dayIndex) => {
-            SHIFTS.forEach((sh) => {
-                (avail(n, day, sh) || []).forEach((name) => {
-                    availabilityCounts[name] = (availabilityCounts[name] || 0) + 1;
-                });
-                (assigned(n, day, sh) || []).forEach((name) => {
-                    counts[name] = (counts[name] || 0) + 1;
-                    lastAssigned[name] = dayIndex;
-                });
+        // Phương án A: xóa phân công cũ trong tháng hiện tại, giữ nguyên các tháng khác.
+        days.forEach((day) => { delete n.assignments[day]; });
+
+        // Mẫu số: tổng số ca thành viên đã đăng ký rảnh trong tháng.
+        days.forEach((day) => SHIFTS.forEach((shift) => {
+            (avail(n, day, shift) || []).forEach((name) => {
+                if (availabilityCounts[name] !== undefined) availabilityCounts[name]++;
             });
-        });
+        }));
 
-        // Chia thành 4 nhóm theo số buổi rảnh (ít, trung bình-thấp, trung bình-cao, nhiều).
-        // Các thành viên trong cùng nhóm có mức cơ hội đăng ký tương đối gần nhau.
-        const eligible = STUDENTS
-            .filter((name) => (availabilityCounts[name] || 0) > 0)
-            .sort((a, b) => availabilityCounts[a] - availabilityCounts[b]);
-        const groupOf = {};
-        const groupSize = Math.max(1, Math.ceil(eligible.length / 4));
-        eligible.forEach((name, index) => {
-            groupOf[name] = Math.min(3, Math.floor(index / groupSize));
-        });
-        const groupMembers = [0, 1, 2, 3].map((g) => eligible.filter((name) => groupOf[name] === g));
+        // Xếp các ca ít người đăng ký trước để ưu tiên những ca khó bố trí.
+        const slots = [];
+        days.forEach((day) => SHIFTS.forEach((shift) => {
+            const candidates = [...new Set(avail(n, day, shift) || [])]
+                .filter((name) => STUDENTS.includes(name));
+            slots.push({ day, shift, candidates });
+        }));
+        slots.sort((a, b) => a.candidates.length - b.candidates.length ||
+            a.day.localeCompare(b.day) || SHIFTS.indexOf(a.shift) - SHIFTS.indexOf(b.shift));
 
-        // Xét từng ca; không giới hạn số ca một người có thể nhận trong ngày hoặc trong tháng.
-        days.forEach((day, dayIndex) => {
+        const target = Math.max(0, Number(n.target) || 0);
+        slots.forEach(({ day, shift, candidates }) => {
+            const selected = [];
+            for (let seat = 0; seat < target; seat++) {
+                const remaining = candidates.filter((name) => !selected.includes(name));
+                if (!remaining.length) break;
+                remaining.sort((a, b) => {
+                    const rateA = (assignedCounts[a] + 1) / Math.max(1, availabilityCounts[a]);
+                    const rateB = (assignedCounts[b] + 1) / Math.max(1, availabilityCounts[b]);
+                    if (Math.abs(rateA - rateB) > 1e-9) return rateA - rateB;
+                    if (assignedCounts[a] !== assignedCounts[b]) return assignedCounts[a] - assignedCounts[b];
+                    return availabilityCounts[b] - availabilityCounts[a];
+                });
+                const chosen = remaining[0];
+                selected.push(chosen);
+                assignedCounts[chosen]++;
+            }
             n.assignments[day] ??= {};
-            SHIFTS.forEach((sh) => {
-                const old = n.assignments[day][sh] || [];
-                const selected = new Set(old);
-                const slotsNeeded = Math.max(0, n.target - old.length);
-
-                for (let i = 0; i < slotsNeeded; i++) {
-                    const candidates = (avail(n, day, sh) || []).filter((name) => !selected.has(name));
-                    if (!candidates.length) break;
-
-                    candidates.sort((a, b) => {
-                        // So sánh tỷ lệ dự kiến trong nhóm có số buổi rảnh tương đương.
-                        const peersA = groupMembers[groupOf[a]] || [a];
-                        const peersB = groupMembers[groupOf[b]] || [b];
-                        const rateA = ((counts[a] || 0) + 1) / Math.max(1, availabilityCounts[a] || 0);
-                        const rateB = ((counts[b] || 0) + 1) / Math.max(1, availabilityCounts[b] || 0);
-                        const avgA = peersA.reduce((sum, name) => sum + (name === a ? rateA : (counts[name] || 0) / Math.max(1, availabilityCounts[name] || 0)), 0) / peersA.length;
-                        const avgB = peersB.reduce((sum, name) => sum + (name === b ? rateB : (counts[name] || 0) / Math.max(1, availabilityCounts[name] || 0)), 0) / peersB.length;
-                        if (Math.abs(avgA - avgB) > 1e-9) return avgA - avgB;
-                        if (Math.abs(rateA - rateB) > 1e-9) return rateA - rateB;
-                        const countDiff = (counts[a] || 0) - (counts[b] || 0);
-                        if (countDiff) return countDiff;
-                        const availabilityDiff = (availabilityCounts[a] || 0) - (availabilityCounts[b] || 0);
-                        if (availabilityDiff) return availabilityDiff;
-                        return (lastAssigned[a] ?? -1) - (lastAssigned[b] ?? -1);
-                    });
-
-                    const chosen = candidates[0];
-                    old.push(chosen);
-                    selected.add(chosen);
-                    counts[chosen] = (counts[chosen] || 0) + 1;
-                    lastAssigned[chosen] = dayIndex;
-                }
-                n.assignments[day][sh] = old;
-            });
+            n.assignments[day][shift] = selected;
         });
 
-        // Đánh giá độ chênh lệch riêng trong từng nhóm tương đồng, không so sánh chéo nhóm.
-        const spreads = groupMembers
-            .filter((members) => members.length > 1)
-            .map((members) => {
-                const rates = members.map((name) => (counts[name] || 0) / Math.max(1, availabilityCounts[name] || 0));
-                return Math.max(...rates) - Math.min(...rates);
-            });
-        const maxSpread = spreads.length ? Math.max(...spreads) : 0;
+        const rates = STUDENTS.filter((name) => availabilityCounts[name] > 0)
+            .map((name) => assignedCounts[name] / availabilityCounts[name]);
+        const spread = rates.length > 1 ? Math.max(...rates) - Math.min(...rates) : 0;
+        const unfilled = slots.reduce((sum, slot) => sum + Math.max(0,
+            target - (n.assignments?.[slot.day]?.[slot.shift]?.length || 0)), 0);
 
         n.publishedMonths ??= {};
         delete n.publishedMonths[month];
         setData(n);
-        if (maxSpread > 0.050001) {
-            setNotice(`Đã tạo đề xuất theo nhóm có số buổi rảnh tương đương. Chênh lệch lớn nhất trong các nhóm là ${(maxSpread * 100).toFixed(1)} điểm phần trăm; lịch rảnh và nhu cầu ca trực có thể khiến mục tiêu 5 điểm phần trăm chưa đạt. Thầy cô vui lòng kiểm tra.`);
-        } else {
-            setNotice(`Đã tạo đề xuất theo nhóm có số buổi rảnh tương đương. Chênh lệch trong mỗi nhóm đều không quá 5 điểm phần trăm.`);
-        }
+        setNotice(`Đã đề xuất lại lịch tháng này. Độ chênh tỷ lệ phân công là ${(spread * 100).toFixed(1)} điểm phần trăm.` +
+            (spread <= 0.100001 ? ' Đạt mục tiêu không quá 10%.' : ' Chưa thể đạt mức 10% với các khung giờ đăng ký hiện có.') +
+            (unfilled > 0 ? ` Còn ${unfilled} vị trí chưa đủ người do thiếu người đăng ký.` : ''));
     };
     // Xuất file Excel.
     const exportExcel = () => {
@@ -704,62 +682,61 @@ function AdminDays({ days, data, toggleAssign }) {
 }
 function StudentStats({ days, data }) {
     const stats = STUDENTS.map((name) => {
-        let assignedCount = 0;
-        let availableCount = 0;
-        const availableDays = new Set();
+        let count = 0;
         days.forEach((day) => {
             SHIFTS.forEach((shift) => {
-                const availableStudents = data.availability?.[day]?.[shift] || [];
                 const assignedStudents = data.assignments?.[day]?.[shift] || [];
-                if (availableStudents.includes(name)) {
-                    availableCount++;
-                    availableDays.add(day);
-                }
-                if (assignedStudents.includes(name)) assignedCount++;
+                if (assignedStudents.includes(name))
+                    count++;
             });
         });
-        const percent = availableCount > 0 ? (assignedCount / availableCount) * 100 : 0;
-        return { name, assignedCount, availableCount, availableDayCount: availableDays.size, percent };
-    }).sort((a, b) => a.percent - b.percent || a.assignedCount - b.assignedCount || a.name.localeCompare(b.name, 'vi'));
-
+        return { name, count };
+    });
+    const total = stats.reduce((sum, student) => sum + student.count, 0);
     return (<section className="panel" style={{ marginTop: 20 }}>
       <div className="panel-title">
         <div>
           <h3>Thống kê phân công Thành viên</h3>
-          <p>Số ca được phân công, số buổi đăng ký rảnh và tỷ lệ phân công trong tháng.</p>
+          <p>Số ca và tỷ lệ phân công trong tháng.</p>
         </div>
         <span className="tag">THỐNG KÊ</span>
       </div>
-      <div style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 10 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
-          <thead>
-            <tr>
-              {['Thành viên', 'Được phân công', 'Buổi đăng ký rảnh', 'Ngày có buổi rảnh', 'Tỷ lệ phân công'].map((heading) => (
-                <th key={heading} style={{ textAlign: 'left', padding: 10, borderBottom: '1px solid #ddd', fontSize: 12, position: 'sticky', top: 0, background: '#f8fafc', zIndex: 1 }}>
-                  {heading}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {stats.map((student) => (
-              <tr key={student.name}>
-                <td style={{ padding: 10 }}>{student.name}</td>
-                <td style={{ padding: 10, fontWeight: 600 }}>{student.assignedCount}</td>
-                <td style={{ padding: 10 }}>{student.availableCount}</td>
-                <td style={{ padding: 10 }}>{student.availableDayCount}</td>
-                <td style={{ padding: 10, minWidth: 120 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ flex: 1, minWidth: 45, height: 7, background: '#e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.min(student.percent, 100)}%`, background: '#16a34a' }} />
-                    </div>
-                    <span style={{ fontWeight: 600, color: '#059669', whiteSpace: 'nowrap' }}>{student.percent.toFixed(1)}%</span>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+      <div style={{
+            display: 'flex',
+            gap: 12,
+            overflowX: 'auto',
+            paddingBottom: 12
+        }}>
+        {stats.map((student) => {
+            const percent = total > 0 ? (student.count / total) * 100 : 0;
+            return (<div key={student.name} style={{
+                    flex: '0 0 calc(50% - 6px)',
+                    minWidth: 0,
+                    boxSizing: 'border-box',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 12,
+                    padding: 14
+                }}>
+              <b>{student.name}</b>
+              <h2 style={{ margin: '12px 0', fontSize: 28 }}>
+                {student.count} ca
+              </h2>
+              <div style={{
+                    height: 8,
+                    background: '#e5e7eb',
+                    borderRadius: 10,
+                    overflow: 'hidden'
+                }}>
+                <div style={{
+                    height: '100%',
+                    width: `${percent}%`,
+                    background: '#16a34a'
+                }}/>
+              </div>
+              <small>{percent.toFixed(1)}% tổng lượt phân công</small>
+            </div>);
+        })}
       </div>
     </section>);
 }
@@ -864,29 +841,42 @@ function Attendance({ days, data, setData }) {
 
       <div style={{ marginTop: 28 }}>
         <h3>Thống kê điểm danh tháng</h3>
-        <div style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 10 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 650 }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            minWidth: 650
+        }}>
             <thead>
               <tr>
-                {['Thành viên', 'Được phân công', 'Có mặt', 'Đi trễ', 'Vắng mặt', 'Có phép', 'Tỷ lệ tham gia'].map((heading) => (
-                  <th key={heading} style={{ textAlign: 'left', padding: 10, borderBottom: '1px solid #ddd', fontSize: 12, position: 'sticky', top: 0, background: '#f8fafc', zIndex: 1 }}>
+                {[
+            'Thành viên',
+            'Được phân công',
+            'Có mặt',
+            'Đi trễ',
+            'Vắng mặt',
+            'Có phép',
+            'Tỷ lệ tham gia'
+        ].map((heading) => (<th key={heading} style={{
+                textAlign: 'left',
+                padding: 10,
+                borderBottom: '1px solid #ddd',
+                fontSize: 12
+            }}>
                     {heading}
-                  </th>
-                ))}
+                  </th>))}
               </tr>
             </thead>
             <tbody>
-              {stats.map((item) => (
-                <tr key={item.name}>
+              {stats.map((item) => (<tr key={item.name}>
                   <td style={{ padding: 10 }}>{item.name}</td>
                   <td style={{ padding: 10 }}>{item.assignedCount}</td>
                   <td style={{ padding: 10 }}>{item.present}</td>
                   <td style={{ padding: 10 }}>{item.late}</td>
                   <td style={{ padding: 10 }}>{item.absent}</td>
                   <td style={{ padding: 10 }}>{item.excused}</td>
-                  <td style={{ padding: 10, fontWeight: 600, color: '#059669' }}>{item.rate.toFixed(1)}%</td>
-                </tr>
-              ))}
+                  <td style={{ padding: 10 }}>{item.rate.toFixed(1)}%</td>
+                </tr>))}
             </tbody>
           </table>
         </div>
