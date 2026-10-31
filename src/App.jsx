@@ -872,10 +872,17 @@ function Attendance({ days, data, setData }) {
 
       <div style={{ marginTop: 28 }}>
         <h3>Thống kê điểm danh tháng</h3>
-        <div style={{ overflowX: 'auto' }}>
+        <div style={{
+          maxHeight: 300,
+          overflowY: 'auto',
+          overflowX: 'auto',
+          border: '1px solid #e5e7eb',
+          borderRadius: 10
+        }}>
           <table style={{
             width: '100%',
-            borderCollapse: 'collapse',
+            borderCollapse: 'separate',
+            borderSpacing: 0,
             minWidth: 650
         }}>
             <thead>
@@ -889,10 +896,15 @@ function Attendance({ days, data, setData }) {
             'Có phép',
             'Tỷ lệ tham gia'
         ].map((heading) => (<th key={heading} style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                background: '#f8fafc',
                 textAlign: 'left',
                 padding: 10,
                 borderBottom: '1px solid #ddd',
-                fontSize: 12
+                fontSize: 12,
+                whiteSpace: 'nowrap'
             }}>
                     {heading}
                   </th>))}
