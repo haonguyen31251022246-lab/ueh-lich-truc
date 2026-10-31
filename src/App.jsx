@@ -1,23 +1,21 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
-import { CalendarDays, Users, ClipboardList, CheckCircle2, ChevronLeft, ChevronRight, Sparkles, Download, ShieldCheck, UserRound, CalendarCheck, Send, Upload } from 'lucide-react';
+import { CalendarDays, Users, ClipboardList, CheckCircle2, ChevronLeft, ChevronRight, Sparkles, Download, ShieldCheck, UserRound, CalendarCheck, Send } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import uehLogo from './images/UEH.jpg';
 const SHIFTS = ['Sáng', 'Chiều', 'Tối'];
-const INITIAL_MEMBERS = [
-    'Nguyễn Xuân Quang', 'Trần Lư Vĩ Tài', 'Đoàn Thu Hằng', 'Nguyễn Thành Khánh Hưng',
-    'Vũ Hải Đăng', 'Thái Hùng', 'Nguyễn Hải Hào', 'Phạm Hoàng Lan Phương',
-    'Ngô Việt Ngân', 'Lý Gia Hân', 'Phạm Thanh Nguyên', 'Võ Thị Tố Nga',
-    'Ngô Thùy Dương', 'Nguyễn Hồ Uyên Thư', 'Phạm Thị Trúc Đào', 'Nguyễn Phú Hội',
-    'Đỗ Thị Hồng Ngọc', 'Nguyễn Văn Gia Khánh', 'Dương Song Huy', 'Lê Hoàng Thảo Linh'
+const STUDENTS = [
+    'Nguyễn Hải Hào',
+    'Trần Khánh Hưng',
+    'Nguyễn Phú Hội',
+    'Nguyễn Xuân Quang'
 ];
 const initial = {
     availability: {},
     assignments: {},
     publishedMonths: {},
     attendance: {},
-    target: 2,
-    members: INITIAL_MEMBERS
+    target: 2
 };
 const key = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 const monthDays = (month) => {
@@ -40,14 +38,7 @@ export default function App() {
     const [loading, setLoading] = useState(true);
     const [dataReady, setDataReady] = useState(false);
     const [role, setRole] = useState('student');
-    const [student, setStudent] = useState(INITIAL_MEMBERS[0]);
-    const [previewMembers, setPreviewMembers] = useState([]);
-    const [showMemberPreview, setShowMemberPreview] = useState(false);
-    const memberFileRef = useRef(null);
-    const members = data.members?.length ? data.members : INITIAL_MEMBERS;
-    useEffect(() => {
-        if (members.length && !members.includes(student)) setStudent(members[0]);
-    }, [members, student]);
+    const [student, setStudent] = useState(STUDENTS[0]);
     const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
     const [notice, setNotice] = useState('');
     // Dùng để tránh ghi ngược dữ liệu vừa nhận từ máy chủ.
@@ -74,7 +65,7 @@ export default function App() {
                     return;
                 if (result?.data) {
                     skipNextSave.current = true;
-                    setData({ ...initial, ...result.data, members: result.data.members?.length ? result.data.members : INITIAL_MEMBERS });
+                    setData({ ...initial, ...result.data });
                 }
                 else {
                     // Upsert giúp tránh lỗi nếu hai người cùng mở website lần đầu.
@@ -99,7 +90,7 @@ export default function App() {
                         return;
                     // Nhận bản mới từ server và không gửi lại chính bản đó.
                     skipNextSave.current = true;
-                    setData({ ...initial, ...payload.new.data, members: payload.new.data.members?.length ? payload.new.data.members : INITIAL_MEMBERS });
+                    setData({ ...initial, ...payload.new.data });
                 })
                     .subscribe((status) => {
                     if (status === 'SUBSCRIBED') {
@@ -193,7 +184,7 @@ export default function App() {
     // Đề xuất phân công tự động.
     const suggest = () => {
         const n = structuredClone(data);
-        const counts = Object.fromEntries(members.map((s) => [s, 0]));
+        const counts = Object.fromEntries(STUDENTS.map((s) => [s, 0]));
         // Đếm số ca đã được phân công.
         Object.values(n.assignments).forEach((x) => {
             SHIFTS.forEach((sh) => {
@@ -229,7 +220,7 @@ export default function App() {
         const assignmentRows = [['Ngày', 'Ca', 'Thành viên được phân công']];
         const attendanceRows = [['Ngày', 'Ca', 'Thành viên', 'Trạng thái']];
         const memberStats = {};
-        members.forEach((name) => {
+        STUDENTS.forEach((name) => {
             memberStats[name] = {
                 registered: 0,
                 assigned: 0,
@@ -281,7 +272,7 @@ export default function App() {
                 'Số ca được thanh toán',
                 'Tiền phụ cấp (VNĐ)'
             ]];
-        members.forEach((name) => {
+        STUDENTS.forEach((name) => {
             const s = memberStats[name];
             const paidShifts = s.present + s.late;
             paymentRows.push([
@@ -343,44 +334,6 @@ export default function App() {
             XLSX.utils.book_append_sheet(workbook, sheet, name);
         });
         XLSX.writeFile(workbook, `UEH-tong-hop-lich-truc-${month}.xlsx`);
-    };
-    // Nhập danh sách mới: thay thế toàn bộ roster, không xóa lịch sử cũ.
-    const importMembers = async (event) => {
-        const file = event.target.files?.[0];
-        if (!file) return;
-        try {
-            const buffer = await file.arrayBuffer();
-            const workbook = XLSX.read(buffer, { type: 'array' });
-            const sheet = workbook.Sheets[workbook.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-            if (!rows.length) throw new Error('File không có dữ liệu.');
-            const header = Object.keys(rows[0]).find((name) => name.trim().toLowerCase() === 'họ và tên');
-            if (!header) throw new Error('Không tìm thấy cột “Họ Và Tên” trong file.');
-            const nextMembers = [...new Set(rows.map((row) => String(row[header]).trim()).filter(Boolean))];
-            if (!nextMembers.length) throw new Error('Không có tên thành viên hợp lệ.');
-            setPreviewMembers(nextMembers);
-            setShowMemberPreview(true);
-            setNotice('');
-        } catch (error) {
-            console.error('Lỗi nhập danh sách:', error);
-            setNotice(error.message || 'Không thể đọc file danh sách.');
-        } finally {
-            event.target.value = '';
-        }
-    };
-    const confirmReplaceMembers = () => {
-        if (!previewMembers.length) return;
-        setData((previous) => ({ ...previous, members: previewMembers }));
-        if (!previewMembers.includes(student)) setStudent(previewMembers[0]);
-        setShowMemberPreview(false);
-        setNotice(`Đã cập nhật ${previewMembers.length} thành viên. Lịch sử phân công và điểm danh được giữ nguyên.`);
-    };
-    const exportMembers = () => {
-        const rows = [['STT', 'Họ Và Tên'], ...members.map((name, index) => [index + 1, name])];
-        const worksheet = XLSX.utils.aoa_to_sheet(rows);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Thanh vien');
-        XLSX.writeFile(workbook, 'Danh-sach-thanh-vien-UEH.xlsx');
     };
     // Danh sách ca trực của Thành viên.
     const myAssignments = days.flatMap((d) => SHIFTS.filter((s) => assigned(data, d, s).includes(student))
@@ -502,7 +455,7 @@ export default function App() {
               <div>
                 <label>Họ và Tên</label>
                 <select value={student} onChange={(e) => setStudent(e.target.value)}>
-                  {members.map((s) => <option key={s}>{s}</option>)}
+                  {STUDENTS.map((s) => <option key={s}>{s}</option>)}
                 </select>
               </div>
               <p>
@@ -590,21 +543,6 @@ export default function App() {
               </div>
             </section>
 
-            <section className="panel" style={{ marginBottom: 18 }}>
-              <div className="panel-title">
-                <div><h3><Users /> Quản lý danh sách thành viên</h3><p>Nhập Excel để thay thế danh sách hiện tại; lịch sử trực vẫn được giữ.</p></div>
-                <span className="tag">{members.length} THÀNH VIÊN</span>
-              </div>
-              <input ref={memberFileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importMembers} style={{ display: 'none' }} />
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
-                <button className="primary" onClick={() => memberFileRef.current?.click()}><Upload /> Tải danh sách lên</button>
-                <button className="secondary" onClick={exportMembers}><Download /> Tải danh sách xuống</button>
-              </div>
-              <div style={{ maxHeight: 180, overflowY: 'auto', border: '1px solid #e5e7eb', borderRadius: 8, padding: 10 }}>
-                {members.map((name, index) => <div key={`${name}-${index}`} style={{ padding: '5px 2px', borderBottom: '1px solid #f0f0f0' }}>{index + 1}. {name}</div>)}
-              </div>
-            </section>
-
             <section className="panel setting">
               <div>
                 <b>Số Thành viên mục tiêu mỗi ca</b>
@@ -625,8 +563,8 @@ export default function App() {
             </section>
 
             <AdminDays days={days} data={data} toggleAssign={toggleAssign}/>
-            <Attendance days={days} data={data} setData={setData} members={members}/>
-            <StudentStats days={days} data={data} members={members}/>
+            <Attendance days={days} data={data} setData={setData}/>
+            <StudentStats days={days} data={data}/>
 
             <section className="panel publish">
               <div>
@@ -649,19 +587,6 @@ export default function App() {
             </section>
           </>)}
 
-        {showMemberPreview && <div style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,.45)', display: 'grid', placeItems: 'center', padding: 16 }}>
-          <section className="panel" style={{ width: 'min(560px, 100%)', maxHeight: '80vh', overflow: 'auto', background: '#fff' }}>
-            <h3>Xác nhận danh sách mới</h3>
-            <p>File có {previewMembers.length} thành viên. Xác nhận sẽ thay thế toàn bộ danh sách hiện tại; dữ liệu lịch sử phân công và điểm danh không bị xóa.</p>
-            <div style={{ maxHeight: 260, overflowY: 'auto', padding: 10, border: '1px solid #e5e7eb', borderRadius: 8 }}>
-              {previewMembers.map((name, index) => <div key={`${name}-${index}`} style={{ padding: 4 }}>{index + 1}. {name}</div>)}
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
-              <button className="secondary" onClick={() => setShowMemberPreview(false)}>Hủy</button>
-              <button className="primary" onClick={confirmReplaceMembers}>Xác nhận thay thế</button>
-            </div>
-          </section>
-        </div>}
         <footer>
           ĐỘI TỰ QUẢN UEH · Đăng ký thời gian rảnh và phân công
         </footer>
@@ -726,8 +651,8 @@ function AdminDays({ days, data, toggleAssign }) {
       </div>
     </section>);
 }
-function StudentStats({ days, data, members }) {
-    const stats = members.map((name) => {
+function StudentStats({ days, data }) {
+    const stats = STUDENTS.map((name) => {
         let count = 0;
         days.forEach((day) => {
             SHIFTS.forEach((shift) => {
@@ -786,146 +711,43 @@ function StudentStats({ days, data, members }) {
       </div>
     </section>);
 }
-function Attendance({ days, data, setData, members }) {
-    const [selectedDay, setSelectedDay] = useState(days[0] || '');
-    const [selectedShift, setSelectedShift] = useState('Sáng');
-    useEffect(() => {
-        if (days.length && !days.includes(selectedDay))
-            setSelectedDay(days[0]);
-    }, [days, selectedDay]);
-    const students = data.assignments?.[selectedDay]?.[selectedShift] || [];
-    const statuses = ['Có mặt', 'Vắng mặt', 'Có phép', 'Đi trễ'];
-    const updateAttendance = (name, status) => {
-        setData((previous) => {
-            const next = structuredClone(previous);
-            next.attendance ??= {};
-            next.attendance[selectedDay] ??= {};
-            next.attendance[selectedDay][selectedShift] ??= {};
-            if (status) {
-                next.attendance[selectedDay][selectedShift][name] = status;
-            }
-            else {
-                delete next.attendance[selectedDay][selectedShift][name];
-            }
-            return next;
-        });
-    };
-    const stats = members.map((name) => {
-        let assignedCount = 0;
-        let present = 0;
-        let absent = 0;
-        let excused = 0;
-        let late = 0;
-        days.forEach((day) => {
-            SHIFTS.forEach((shift) => {
-                const roster = data.assignments?.[day]?.[shift] || [];
-                if (roster.includes(name)) {
-                    assignedCount += 1;
-                    const status = data.attendance?.[day]?.[shift]?.[name];
-                    if (status === 'Có mặt')
-                        present += 1;
-                    if (status === 'Vắng mặt')
-                        absent += 1;
-                    if (status === 'Có phép')
-                        excused += 1;
-                    if (status === 'Đi trễ')
-                        late += 1;
-                }
-            });
-        });
-        const rate = assignedCount
-            ? ((present + late) / assignedCount) * 100
-            : 0;
-        return { name, assignedCount, present, absent, excused, late, rate };
-    });
-    return (<section className="panel" style={{ marginTop: 20 }}>
-      <div className="panel-title">
-        <div>
-          <h3><ClipboardList /> Điểm danh Thành viên</h3>
-          <p>Chọn ngày và ca trực để ghi nhận tình trạng tham gia.</p>
-        </div>
-        <span className="tag">ĐIỂM DANH</span>
-      </div>
+function Attendance({ days, data, setData }) {
+  const [selectedDay, setSelectedDay] = useState(days[0] || '');
+  const [selectedShift, setSelectedShift] = useState('Sáng');
+  useEffect(() => { if (days.length && !days.includes(selectedDay)) setSelectedDay(days[0]); }, [days, selectedDay]);
+  const students = data.assignments?.[selectedDay]?.[selectedShift] || [];
+  const statuses = ['Có mặt', 'Vắng mặt', 'Có phép', 'Đi trễ'];
+  const updateAttendance = (name, status) => setData(previous => {
+    const next = structuredClone(previous);
+    next.attendance ??= {}; next.attendance[selectedDay] ??= {}; next.attendance[selectedDay][selectedShift] ??= {};
+    if (status) next.attendance[selectedDay][selectedShift][name] = status;
+    else delete next.attendance[selectedDay][selectedShift][name];
+    return next;
+  });
+  const stats = STUDENTS.map(name => {
+    let assignedCount = 0, present = 0, absent = 0, excused = 0, late = 0;
+    days.forEach(day => SHIFTS.forEach(shift => {
+      const roster = data.assignments?.[day]?.[shift] || [];
+      if (roster.includes(name)) {
+        assignedCount++;
+        const status = data.attendance?.[day]?.[shift]?.[name];
+        if (status === 'Có mặt') present++;
+        if (status === 'Vắng mặt') absent++;
+        if (status === 'Có phép') excused++;
+        if (status === 'Đi trễ') late++;
+      }
+    }));
+    const rate = assignedCount ? ((present + late) / assignedCount) * 100 : 0;
+    return { name, assignedCount, present, absent, excused, late, rate };
+  }).sort((a, b) => b.rate - a.rate || b.assignedCount - a.assignedCount);
 
-      <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', marginBottom: 8 }}>Chọn ngày trực</label>
-        <select value={selectedDay} onChange={(event) => setSelectedDay(event.target.value)} disabled={!days.length} style={{ padding: 10, borderRadius: 8, width: '100%' }}>
-          {days.map((day) => (<option key={day} value={day}>{fmt(day)}</option>))}
-        </select>
-      </div>
-
-      <div style={{ marginBottom: 20 }}>
-        <label style={{ display: 'block', marginBottom: 8 }}>Chọn ca trực</label>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {SHIFTS.map((shift) => (<button type="button" key={shift} onClick={() => setSelectedShift(shift)} className={selectedShift === shift ? 'primary' : 'secondary'}>
-              {shift}
-            </button>))}
-        </div>
-      </div>
-
-      <div>
-        <h4>Danh sách ca {selectedShift}</h4>
-
-        {students.length ? (students.map((name) => (<div key={name} style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 12,
-                padding: '12px 0',
-                borderBottom: '1px solid #e5e7eb',
-                flexWrap: 'wrap'
-            }}>
-              <b>{name}</b>
-              <select value={data.attendance?.[selectedDay]?.[selectedShift]?.[name] || ''} onChange={(event) => updateAttendance(name, event.target.value)} style={{ padding: 9, borderRadius: 8, minWidth: 160 }}>
-                <option value="">Chưa điểm danh</option>
-                {statuses.map((status) => (<option key={status} value={status}>{status}</option>))}
-              </select>
-            </div>))) : (<div className="empty">
-            Chưa có Thành viên được phân công trong ca này.
-          </div>)}
-      </div>
-
-      <div style={{ marginTop: 28 }}>
-        <h3>Thống kê điểm danh tháng</h3>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            minWidth: 650
-        }}>
-            <thead>
-              <tr>
-                {[
-            'Thành viên',
-            'Được phân công',
-            'Có mặt',
-            'Đi trễ',
-            'Vắng mặt',
-            'Có phép',
-            'Tỷ lệ tham gia'
-        ].map((heading) => (<th key={heading} style={{
-                textAlign: 'left',
-                padding: 10,
-                borderBottom: '1px solid #ddd',
-                fontSize: 12
-            }}>
-                    {heading}
-                  </th>))}
-              </tr>
-            </thead>
-            <tbody>
-              {stats.map((item) => (<tr key={item.name}>
-                  <td style={{ padding: 10 }}>{item.name}</td>
-                  <td style={{ padding: 10 }}>{item.assignedCount}</td>
-                  <td style={{ padding: 10 }}>{item.present}</td>
-                  <td style={{ padding: 10 }}>{item.late}</td>
-                  <td style={{ padding: 10 }}>{item.absent}</td>
-                  <td style={{ padding: 10 }}>{item.excused}</td>
-                  <td style={{ padding: 10 }}>{item.rate.toFixed(1)}%</td>
-                </tr>))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>);
+  return (
+    <section className="panel" style={{ marginTop: 20 }}>
+      <div className="panel-title"><div><h3><ClipboardList /> Điểm danh Thành viên</h3><p>Chọn ngày và ca trực để ghi nhận tình trạng tham gia.</p></div><span className="tag">ĐIỂM DANH</span></div>
+      <div style={{ marginBottom: 16 }}><label style={{ display: 'block', marginBottom: 8 }}>Chọn ngày trực</label><select value={selectedDay} onChange={e => setSelectedDay(e.target.value)} disabled={!days.length} style={{ padding: 10, borderRadius: 8, width: '100%' }}>{days.map(day => <option key={day} value={day}>{fmt(day)}</option>)}</select></div>
+      <div style={{ marginBottom: 20 }}><label style={{ display: 'block', marginBottom: 8 }}>Chọn ca trực</label><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{SHIFTS.map(shift => <button type="button" key={shift} onClick={() => setSelectedShift(shift)} className={selectedShift === shift ? 'primary' : 'secondary'}>{shift}</button>)}</div></div>
+      <div><h4>Danh sách ca {selectedShift}</h4>{students.length ? students.map(name => <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap' }}><b>{name}</b><select value={data.attendance?.[selectedDay]?.[selectedShift]?.[name] || ''} onChange={e => updateAttendance(name, e.target.value)} style={{ padding: 9, borderRadius: 8, minWidth: 160 }}><option value="">Chưa điểm danh</option>{statuses.map(status => <option key={status} value={status}>{status}</option>)}</select></div>) : <div className="empty">Chưa có Thành viên được phân công trong ca này.</div>}</div>
+      <div style={{ marginTop: 28 }}><h3>Thống kê điểm danh tháng</h3><div style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 10 }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 650 }}><thead><tr>{['Thành viên', 'Được phân công', 'Có mặt', 'Đi trễ', 'Vắng mặt', 'Có phép', 'Tỷ lệ tham gia'].map(heading => <th key={heading} style={{ textAlign: 'left', padding: 10, borderBottom: '1px solid #ddd', fontSize: 12, position: 'sticky', top: 0, background: '#f8fafc', zIndex: 1 }}>{heading}</th>)}</tr></thead><tbody>{stats.map(item => <tr key={item.name}><td style={{ padding: 10 }}>{item.name}</td><td style={{ padding: 10 }}>{item.assignedCount}</td><td style={{ padding: 10 }}>{item.present}</td><td style={{ padding: 10 }}>{item.late}</td><td style={{ padding: 10 }}>{item.absent}</td><td style={{ padding: 10 }}>{item.excused}</td><td style={{ padding: 10, fontWeight: 600, color: '#059669' }}>{item.rate.toFixed(1)}%</td></tr>)}</tbody></table></div></div>
+    </section>
+  );
 }
