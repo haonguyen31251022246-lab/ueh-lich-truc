@@ -19,7 +19,8 @@ const SHIFTS = ['Sáng', 'Chiều', 'Tối'];
 const STUDENTS = [
   'Nguyễn Hải Hào',
   'Trần Khánh Hưng',
-  'Lê Thanh Đào'
+  'Nguyễn Phú Hội',
+  'Nguyễn Xuân Quang'
 ];
 const KEY = 'uehsvtq-demo';
 const initial = {
