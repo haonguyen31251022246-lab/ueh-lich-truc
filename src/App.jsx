@@ -682,63 +682,94 @@ function AdminDays({ days, data, toggleAssign }) {
 }
 function StudentStats({ days, data }) {
     const stats = STUDENTS.map((name) => {
-        let count = 0;
+        let assignedCount = 0;
+        let availableCount = 0;
+        const availableDays = new Set();
+
         days.forEach((day) => {
             SHIFTS.forEach((shift) => {
+                const availableStudents = data.availability?.[day]?.[shift] || [];
                 const assignedStudents = data.assignments?.[day]?.[shift] || [];
-                if (assignedStudents.includes(name))
-                    count++;
+                if (availableStudents.includes(name)) {
+                    availableCount++;
+                    availableDays.add(day);
+                }
+                if (assignedStudents.includes(name)) assignedCount++;
             });
         });
-        return { name, count };
-    });
-    const total = stats.reduce((sum, student) => sum + student.count, 0);
-    return (<section className="panel" style={{ marginTop: 20 }}>
-      <div className="panel-title">
-        <div>
-          <h3>Thống kê phân công Thành viên</h3>
-          <p>Số ca và tỷ lệ phân công trong tháng.</p>
-        </div>
-        <span className="tag">THỐNG KÊ</span>
-      </div>
 
-      <div style={{
-            display: 'flex',
-            gap: 12,
-            overflowX: 'auto',
-            paddingBottom: 12
-        }}>
-        {stats.map((student) => {
-            const percent = total > 0 ? (student.count / total) * 100 : 0;
-            return (<div key={student.name} style={{
-                    flex: '0 0 calc(50% - 6px)',
-                    minWidth: 0,
-                    boxSizing: 'border-box',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 12,
-                    padding: 14
+        return {
+            name,
+            assignedCount,
+            availableCount,
+            availableDays: availableDays.size,
+            rate: availableCount > 0 ? (assignedCount / availableCount) * 100 : 0
+        };
+    });
+
+    return (
+        <section className="panel" style={{ marginTop: 20 }}>
+            <div className="panel-title">
+                <div>
+                    <h3>Thống kê phân công Thành viên</h3>
+                    <p>Số ca được phân công so với số ca đã đăng ký rảnh trong tháng.</p>
+                </div>
+                <span className="tag">THỐNG KÊ</span>
+            </div>
+
+            <div style={{
+                maxHeight: 320,
+                overflowY: 'auto',
+                overflowX: 'auto',
+                border: '1px solid #e5e7eb',
+                borderRadius: 10
+            }}>
+                <table style={{
+                    width: '100%',
+                    minWidth: 650,
+                    borderCollapse: 'separate',
+                    borderSpacing: 0
                 }}>
-              <b>{student.name}</b>
-              <h2 style={{ margin: '12px 0', fontSize: 28 }}>
-                {student.count} ca
-              </h2>
-              <div style={{
-                    height: 8,
-                    background: '#e5e7eb',
-                    borderRadius: 10,
-                    overflow: 'hidden'
-                }}>
-                <div style={{
-                    height: '100%',
-                    width: `${percent}%`,
-                    background: '#16a34a'
-                }}/>
-              </div>
-              <small>{percent.toFixed(1)}% tổng lượt phân công</small>
-            </div>);
-        })}
-      </div>
-    </section>);
+                    <thead>
+                        <tr>
+                            {[
+                                'Thành viên',
+                                'Được phân công',
+                                'Buổi đăng ký rảnh',
+                                'Ngày có buổi rảnh',
+                                'Tỷ lệ phân công'
+                            ].map((heading) => (
+                                <th key={heading} style={{
+                                    position: 'sticky',
+                                    top: 0,
+                                    zIndex: 1,
+                                    background: '#f8fafc',
+                                    textAlign: 'left',
+                                    padding: '12px 10px',
+                                    borderBottom: '1px solid #d1d5db',
+                                    fontSize: 12,
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    {heading}
+                                </th>
+                            ))}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {stats.map((student) => (
+                            <tr key={student.name}>
+                                <td style={{ padding: 10, borderBottom: '1px solid #eee', fontWeight: 600 }}>{student.name}</td>
+                                <td style={{ padding: 10, borderBottom: '1px solid #eee' }}>{student.assignedCount}</td>
+                                <td style={{ padding: 10, borderBottom: '1px solid #eee' }}>{student.availableCount}</td>
+                                <td style={{ padding: 10, borderBottom: '1px solid #eee' }}>{student.availableDays}</td>
+                                <td style={{ padding: 10, borderBottom: '1px solid #eee', fontWeight: 600 }}>{student.rate.toFixed(1)}%</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    );
 }
 function Attendance({ days, data, setData }) {
     const [selectedDay, setSelectedDay] = useState(days[0] || '');
