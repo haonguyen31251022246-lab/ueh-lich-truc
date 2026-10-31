@@ -201,8 +201,13 @@ export default function App() {
             n.assignments[day] ??= {};
             SHIFTS.forEach((sh) => {
                 const old = n.assignments[day][sh] || [];
+                // Mỗi thành viên chỉ được nhận tối đa 1 ca trong cùng một ngày,
+                // bất kể họ đã đăng ký rảnh ở Sáng, Chiều hay Tối.
+                const alreadyAssignedToday = new Set(
+                    SHIFTS.flatMap((shift) => n.assignments[day]?.[shift] || [])
+                );
                 const candidates = avail(n, day, sh)
-                    .filter((name) => !old.includes(name))
+                    .filter((name) => !alreadyAssignedToday.has(name))
                     .sort((a, b) => {
                         // 1) Tỷ lệ phân công thấp hơn được ưu tiên.
                         const rateA = (counts[a] || 0) / Math.max(1, availabilityCounts[a] || 0);
@@ -229,7 +234,7 @@ export default function App() {
         n.publishedMonths ??= {};
         delete n.publishedMonths[month];
         setData(n);
-        setNotice('Đã tạo đề xuất theo 4 tiêu chí công bằng trong tháng. Thầy cô hãy kiểm tra trước khi công bố.');
+        setNotice('Đã tạo đề xuất theo 4 tiêu chí; mỗi thành viên tối đa 1 ca/ngày. Thầy cô hãy kiểm tra trước khi công bố.');
     };
     // Xuất file Excel.
     const exportExcel = () => {
