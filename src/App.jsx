@@ -592,7 +592,7 @@ export default function App() {
 
             <section className="panel" style={{ marginBottom: 18 }}>
               <div className="panel-title">
-                <div><h3><Users /> Quản lý danh sách thành viên</h3><p>Nhập Excel/CSV để thay thế danh sách hiện tại; lịch sử trực vẫn được giữ.</p></div>
+                <div><h3><Users /> Quản lý danh sách thành viên</h3><p>Nhập Excel để thay thế danh sách hiện tại; lịch sử trực vẫn được giữ.</p></div>
                 <span className="tag">{members.length} THÀNH VIÊN</span>
               </div>
               <input ref={memberFileRef} type="file" accept=".xlsx,.xls,.csv" onChange={importMembers} style={{ display: 'none' }} />
