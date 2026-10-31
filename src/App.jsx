@@ -677,62 +677,60 @@ function StudentStats({ days, data }) {
     const stats = STUDENTS.map((name) => {
         let assignedCount = 0;
         let availableCount = 0;
+        const availableDays = new Set();
         days.forEach((day) => {
             SHIFTS.forEach((shift) => {
                 const availableStudents = data.availability?.[day]?.[shift] || [];
                 const assignedStudents = data.assignments?.[day]?.[shift] || [];
-                if (availableStudents.includes(name))
+                if (availableStudents.includes(name)) {
                     availableCount++;
-                if (assignedStudents.includes(name))
-                    assignedCount++;
+                    availableDays.add(day);
+                }
+                if (assignedStudents.includes(name)) assignedCount++;
             });
         });
         const percent = availableCount > 0 ? (assignedCount / availableCount) * 100 : 0;
-        return { name, assignedCount, availableCount, percent };
-    });
+        return { name, assignedCount, availableCount, availableDayCount: availableDays.size, percent };
+    }).sort((a, b) => a.percent - b.percent || a.assignedCount - b.assignedCount || a.name.localeCompare(b.name, 'vi'));
+
     return (<section className="panel" style={{ marginTop: 20 }}>
       <div className="panel-title">
         <div>
           <h3>Thống kê phân công Thành viên</h3>
-          <p>Số ca và tỷ lệ phân công trong tháng.</p>
+          <p>Số ca được phân công, số buổi đăng ký rảnh và tỷ lệ phân công trong tháng.</p>
         </div>
         <span className="tag">THỐNG KÊ</span>
       </div>
-
-      <div style={{
-            display: 'flex',
-            gap: 12,
-            overflowX: 'auto',
-            paddingBottom: 12
-        }}>
-        {stats.map((student) => {
-            return (<div key={student.name} style={{
-                    flex: '0 0 calc(50% - 6px)',
-                    minWidth: 0,
-                    boxSizing: 'border-box',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: 12,
-                    padding: 14
-                }}>
-              <b>{student.name}</b>
-              <h2 style={{ margin: '12px 0', fontSize: 28 }}>
-                {student.assignedCount}/{student.availableCount} ca
-              </h2>
-              <div style={{
-                    height: 8,
-                    background: '#e5e7eb',
-                    borderRadius: 10,
-                    overflow: 'hidden'
-                }}>
-                <div style={{
-                    height: '100%',
-                    width: `${Math.min(student.percent, 100)}%`,
-                    background: '#16a34a'
-                }}/>
-              </div>
-              <small>{student.percent.toFixed(1)}% số buổi có thể tham gia</small>
-            </div>);
-        })}
+      <div style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 10 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
+          <thead>
+            <tr>
+              {['Thành viên', 'Được phân công', 'Buổi đăng ký rảnh', 'Ngày có buổi rảnh', 'Tỷ lệ phân công'].map((heading) => (
+                <th key={heading} style={{ textAlign: 'left', padding: 10, borderBottom: '1px solid #ddd', fontSize: 12, position: 'sticky', top: 0, background: '#f8fafc', zIndex: 1 }}>
+                  {heading}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {stats.map((student) => (
+              <tr key={student.name}>
+                <td style={{ padding: 10 }}>{student.name}</td>
+                <td style={{ padding: 10, fontWeight: 600 }}>{student.assignedCount}</td>
+                <td style={{ padding: 10 }}>{student.availableCount}</td>
+                <td style={{ padding: 10 }}>{student.availableDayCount}</td>
+                <td style={{ padding: 10, minWidth: 120 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ flex: 1, minWidth: 45, height: 7, background: '#e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${Math.min(student.percent, 100)}%`, background: '#16a34a' }} />
+                    </div>
+                    <span style={{ fontWeight: 600, color: '#059669', whiteSpace: 'nowrap' }}>{student.percent.toFixed(1)}%</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </section>);
 }
