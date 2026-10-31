@@ -176,43 +176,52 @@ export default function App() {
         });
         setNotice('Đã cập nhật phân công. Tháng này cần công bố lại.');
     };
-    // Đề xuất phân công tự động.
+    // Đề xuất phân công tự động theo 4 tiêu chí công bằng trong tháng đang chọn.
     const suggest = () => {
         const n = structuredClone(data);
         const counts = Object.fromEntries(STUDENTS.map((s) => [s, 0]));
         const availabilityCounts = Object.fromEntries(STUDENTS.map((s) => [s, 0]));
-        // Tiêu chí 1: đếm tổng số ca đã được phân công của từng thành viên.
-        Object.values(n.assignments).forEach((x) => {
+        const lastAssigned = Object.fromEntries(STUDENTS.map((s) => [s, -1]));
+
+        // Chỉ xét dữ liệu của tháng đang chọn để mỗi tháng có cơ hội cân bằng lại.
+        days.forEach((day, dayIndex) => {
             SHIFTS.forEach((sh) => {
-                (x?.[sh] || []).forEach((s) => {
-                    counts[s] = (counts[s] || 0) + 1;
+                (avail(n, day, sh) || []).forEach((name) => {
+                    availabilityCounts[name] = (availabilityCounts[name] || 0) + 1;
+                });
+                (assigned(n, day, sh) || []).forEach((name) => {
+                    counts[name] = (counts[name] || 0) + 1;
+                    lastAssigned[name] = dayIndex;
                 });
             });
         });
-        // Tiêu chí 2: đếm tổng số buổi rảnh mà từng thành viên đã tick.
-        Object.values(n.availability || {}).forEach((dayData) => {
-            SHIFTS.forEach((sh) => {
-                (dayData?.[sh] || []).forEach((s) => {
-                    availabilityCounts[s] = (availabilityCounts[s] || 0) + 1;
-                });
-            });
-        });
-        // Phân công cho tháng đang chọn.
-        days.forEach((day) => {
+
+        // Xét lần lượt từng ngày/ca; sau mỗi lượt chọn, cập nhật số ca để lượt sau cân bằng hơn.
+        days.forEach((day, dayIndex) => {
             n.assignments[day] ??= {};
             SHIFTS.forEach((sh) => {
                 const old = n.assignments[day][sh] || [];
                 const candidates = avail(n, day, sh)
-                    .filter((s) => !old.includes(s))
-                    // Ưu tiên tiêu chí 1 trước; chỉ khi bằng nhau mới xét tiêu chí 2.
-                    .sort((a, b) =>
-                        (counts[a] || 0) - (counts[b] || 0) ||
-                        (availabilityCounts[a] || 0) - (availabilityCounts[b] || 0)
-                    );
+                    .filter((name) => !old.includes(name))
+                    .sort((a, b) => {
+                        // 1) Tỷ lệ phân công thấp hơn được ưu tiên.
+                        const rateA = (counts[a] || 0) / Math.max(1, availabilityCounts[a] || 0);
+                        const rateB = (counts[b] || 0) / Math.max(1, availabilityCounts[b] || 0);
+                        if (rateA !== rateB) return rateA - rateB;
+                        // 2) Nếu tỷ lệ bằng nhau, ưu tiên người có ít ca hơn.
+                        const countDiff = (counts[a] || 0) - (counts[b] || 0);
+                        if (countDiff) return countDiff;
+                        // 3) Nếu vẫn bằng nhau, ưu tiên người có ít buổi rảnh hơn.
+                        const availabilityDiff = (availabilityCounts[a] || 0) - (availabilityCounts[b] || 0);
+                        if (availabilityDiff) return availabilityDiff;
+                        // 4) Nếu vẫn bằng nhau, ưu tiên người lâu chưa được phân công (hoặc chưa từng được phân công).
+                        return (lastAssigned[a] ?? -1) - (lastAssigned[b] ?? -1);
+                    });
                 const add = candidates.slice(0, Math.max(0, n.target - old.length));
                 n.assignments[day][sh] = [...old, ...add];
-                add.forEach((s) => {
-                    counts[s] = (counts[s] || 0) + 1;
+                add.forEach((name) => {
+                    counts[name] = (counts[name] || 0) + 1;
+                    lastAssigned[name] = dayIndex;
                 });
             });
         });
@@ -220,7 +229,7 @@ export default function App() {
         n.publishedMonths ??= {};
         delete n.publishedMonths[month];
         setData(n);
-        setNotice('Đã tạo đề xuất. Thầy cô hãy kiểm tra trước khi công bố.');
+        setNotice('Đã tạo đề xuất theo 4 tiêu chí công bằng trong tháng. Thầy cô hãy kiểm tra trước khi công bố.');
     };
     // Xuất file Excel.
     const exportExcel = () => {
