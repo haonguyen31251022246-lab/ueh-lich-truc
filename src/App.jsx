@@ -648,17 +648,21 @@ function AdminDays({ days, data, toggleAssign }) {
 }
 function StudentStats({ days, data }) {
     const stats = STUDENTS.map((name) => {
-        let count = 0;
+        let assignedCount = 0;
+        let availableCount = 0;
         days.forEach((day) => {
             SHIFTS.forEach((shift) => {
+                const availableStudents = data.availability?.[day]?.[shift] || [];
                 const assignedStudents = data.assignments?.[day]?.[shift] || [];
+                if (availableStudents.includes(name))
+                    availableCount++;
                 if (assignedStudents.includes(name))
-                    count++;
+                    assignedCount++;
             });
         });
-        return { name, count };
+        const percent = availableCount > 0 ? (assignedCount / availableCount) * 100 : 0;
+        return { name, assignedCount, availableCount, percent };
     });
-    const total = stats.reduce((sum, student) => sum + student.count, 0);
     return (<section className="panel" style={{ marginTop: 20 }}>
       <div className="panel-title">
         <div>
@@ -675,7 +679,6 @@ function StudentStats({ days, data }) {
             paddingBottom: 12
         }}>
         {stats.map((student) => {
-            const percent = total > 0 ? (student.count / total) * 100 : 0;
             return (<div key={student.name} style={{
                     flex: '0 0 calc(50% - 6px)',
                     minWidth: 0,
@@ -686,7 +689,7 @@ function StudentStats({ days, data }) {
                 }}>
               <b>{student.name}</b>
               <h2 style={{ margin: '12px 0', fontSize: 28 }}>
-                {student.count} ca
+                {student.assignedCount}/{student.availableCount} ca
               </h2>
               <div style={{
                     height: 8,
@@ -696,11 +699,11 @@ function StudentStats({ days, data }) {
                 }}>
                 <div style={{
                     height: '100%',
-                    width: `${percent}%`,
+                    width: `${Math.min(student.percent, 100)}%`,
                     background: '#16a34a'
                 }}/>
               </div>
-              <small>{percent.toFixed(1)}% tổng lượt phân công</small>
+              <small>{student.percent.toFixed(1)}% số buổi có thể tham gia</small>
             </div>);
         })}
       </div>
@@ -807,42 +810,29 @@ function Attendance({ days, data, setData }) {
 
       <div style={{ marginTop: 28 }}>
         <h3>Thống kê điểm danh tháng</h3>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            minWidth: 650
-        }}>
+        <div style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 10 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 650 }}>
             <thead>
               <tr>
-                {[
-            'Thành viên',
-            'Được phân công',
-            'Có mặt',
-            'Đi trễ',
-            'Vắng mặt',
-            'Có phép',
-            'Tỷ lệ tham gia'
-        ].map((heading) => (<th key={heading} style={{
-                textAlign: 'left',
-                padding: 10,
-                borderBottom: '1px solid #ddd',
-                fontSize: 12
-            }}>
+                {['Thành viên', 'Được phân công', 'Có mặt', 'Đi trễ', 'Vắng mặt', 'Có phép', 'Tỷ lệ tham gia'].map((heading) => (
+                  <th key={heading} style={{ textAlign: 'left', padding: 10, borderBottom: '1px solid #ddd', fontSize: 12, position: 'sticky', top: 0, background: '#f8fafc', zIndex: 1 }}>
                     {heading}
-                  </th>))}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {stats.map((item) => (<tr key={item.name}>
+              {stats.map((item) => (
+                <tr key={item.name}>
                   <td style={{ padding: 10 }}>{item.name}</td>
                   <td style={{ padding: 10 }}>{item.assignedCount}</td>
                   <td style={{ padding: 10 }}>{item.present}</td>
                   <td style={{ padding: 10 }}>{item.late}</td>
                   <td style={{ padding: 10 }}>{item.absent}</td>
                   <td style={{ padding: 10 }}>{item.excused}</td>
-                  <td style={{ padding: 10 }}>{item.rate.toFixed(1)}%</td>
-                </tr>))}
+                  <td style={{ padding: 10, fontWeight: 600, color: '#059669' }}>{item.rate.toFixed(1)}%</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
