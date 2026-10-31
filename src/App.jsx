@@ -4,12 +4,7 @@ import { CalendarDays, Users, ClipboardList, CheckCircle2, ChevronLeft, ChevronR
 import { supabase } from './lib/supabase';
 import uehLogo from './images/UEH.jpg';
 const SHIFTS = ['Sáng', 'Chiều', 'Tối'];
-const STUDENTS = [
-    'Nguyễn Hải Hào',
-    'Trần Khánh Hưng',
-    'Nguyễn Phú Hội',
-    'Nguyễn Xuân Quang'
-];
+const STUDENTS = ['Nguyễn Xuân Quang', 'Trần Lư Vĩ Tài', 'Đoàn Thu Hằng', 'Nguyễn Thành Khánh Hưng', 'Vũ Hải Đăng', 'Thái Hùng', 'Nguyễn Hải Hào', 'Phạm Hoàng Lan Phương', 'Ngô Việt Ngân', 'Lý Gia Hân', 'Phạm Thanh Nguyên', 'Võ Thị Tố Nga', 'Ngô Thùy Dương', 'Nguyễn Hồ Uyên Thư', 'Phạm Thị Trúc Đào', 'Nguyễn Phú Hội', 'Đỗ Thị Hồng Ngọc', 'Nguyễn Văn Gia Khánh', 'Dương Song Huy', 'Lê Hoàng Thảo Linh'];
 const initial = {
     availability: {},
     assignments: {},
@@ -712,42 +707,145 @@ function StudentStats({ days, data }) {
     </section>);
 }
 function Attendance({ days, data, setData }) {
-  const [selectedDay, setSelectedDay] = useState(days[0] || '');
-  const [selectedShift, setSelectedShift] = useState('Sáng');
-  useEffect(() => { if (days.length && !days.includes(selectedDay)) setSelectedDay(days[0]); }, [days, selectedDay]);
-  const students = data.assignments?.[selectedDay]?.[selectedShift] || [];
-  const statuses = ['Có mặt', 'Vắng mặt', 'Có phép', 'Đi trễ'];
-  const updateAttendance = (name, status) => setData(previous => {
-    const next = structuredClone(previous);
-    next.attendance ??= {}; next.attendance[selectedDay] ??= {}; next.attendance[selectedDay][selectedShift] ??= {};
-    if (status) next.attendance[selectedDay][selectedShift][name] = status;
-    else delete next.attendance[selectedDay][selectedShift][name];
-    return next;
-  });
-  const stats = STUDENTS.map(name => {
-    let assignedCount = 0, present = 0, absent = 0, excused = 0, late = 0;
-    days.forEach(day => SHIFTS.forEach(shift => {
-      const roster = data.assignments?.[day]?.[shift] || [];
-      if (roster.includes(name)) {
-        assignedCount++;
-        const status = data.attendance?.[day]?.[shift]?.[name];
-        if (status === 'Có mặt') present++;
-        if (status === 'Vắng mặt') absent++;
-        if (status === 'Có phép') excused++;
-        if (status === 'Đi trễ') late++;
-      }
-    }));
-    const rate = assignedCount ? ((present + late) / assignedCount) * 100 : 0;
-    return { name, assignedCount, present, absent, excused, late, rate };
-  }).sort((a, b) => b.rate - a.rate || b.assignedCount - a.assignedCount);
+    const [selectedDay, setSelectedDay] = useState(days[0] || '');
+    const [selectedShift, setSelectedShift] = useState('Sáng');
+    useEffect(() => {
+        if (days.length && !days.includes(selectedDay))
+            setSelectedDay(days[0]);
+    }, [days, selectedDay]);
+    const students = data.assignments?.[selectedDay]?.[selectedShift] || [];
+    const statuses = ['Có mặt', 'Vắng mặt', 'Có phép', 'Đi trễ'];
+    const updateAttendance = (name, status) => {
+        setData((previous) => {
+            const next = structuredClone(previous);
+            next.attendance ??= {};
+            next.attendance[selectedDay] ??= {};
+            next.attendance[selectedDay][selectedShift] ??= {};
+            if (status) {
+                next.attendance[selectedDay][selectedShift][name] = status;
+            }
+            else {
+                delete next.attendance[selectedDay][selectedShift][name];
+            }
+            return next;
+        });
+    };
+    const stats = STUDENTS.map((name) => {
+        let assignedCount = 0;
+        let present = 0;
+        let absent = 0;
+        let excused = 0;
+        let late = 0;
+        days.forEach((day) => {
+            SHIFTS.forEach((shift) => {
+                const roster = data.assignments?.[day]?.[shift] || [];
+                if (roster.includes(name)) {
+                    assignedCount += 1;
+                    const status = data.attendance?.[day]?.[shift]?.[name];
+                    if (status === 'Có mặt')
+                        present += 1;
+                    if (status === 'Vắng mặt')
+                        absent += 1;
+                    if (status === 'Có phép')
+                        excused += 1;
+                    if (status === 'Đi trễ')
+                        late += 1;
+                }
+            });
+        });
+        const rate = assignedCount
+            ? ((present + late) / assignedCount) * 100
+            : 0;
+        return { name, assignedCount, present, absent, excused, late, rate };
+    });
+    return (<section className="panel" style={{ marginTop: 20 }}>
+      <div className="panel-title">
+        <div>
+          <h3><ClipboardList /> Điểm danh Thành viên</h3>
+          <p>Chọn ngày và ca trực để ghi nhận tình trạng tham gia.</p>
+        </div>
+        <span className="tag">ĐIỂM DANH</span>
+      </div>
 
-  return (
-    <section className="panel" style={{ marginTop: 20 }}>
-      <div className="panel-title"><div><h3><ClipboardList /> Điểm danh Thành viên</h3><p>Chọn ngày và ca trực để ghi nhận tình trạng tham gia.</p></div><span className="tag">ĐIỂM DANH</span></div>
-      <div style={{ marginBottom: 16 }}><label style={{ display: 'block', marginBottom: 8 }}>Chọn ngày trực</label><select value={selectedDay} onChange={e => setSelectedDay(e.target.value)} disabled={!days.length} style={{ padding: 10, borderRadius: 8, width: '100%' }}>{days.map(day => <option key={day} value={day}>{fmt(day)}</option>)}</select></div>
-      <div style={{ marginBottom: 20 }}><label style={{ display: 'block', marginBottom: 8 }}>Chọn ca trực</label><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{SHIFTS.map(shift => <button type="button" key={shift} onClick={() => setSelectedShift(shift)} className={selectedShift === shift ? 'primary' : 'secondary'}>{shift}</button>)}</div></div>
-      <div><h4>Danh sách ca {selectedShift}</h4>{students.length ? students.map(name => <div key={name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, padding: '12px 0', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap' }}><b>{name}</b><select value={data.attendance?.[selectedDay]?.[selectedShift]?.[name] || ''} onChange={e => updateAttendance(name, e.target.value)} style={{ padding: 9, borderRadius: 8, minWidth: 160 }}><option value="">Chưa điểm danh</option>{statuses.map(status => <option key={status} value={status}>{status}</option>)}</select></div>) : <div className="empty">Chưa có Thành viên được phân công trong ca này.</div>}</div>
-      <div style={{ marginTop: 28 }}><h3>Thống kê điểm danh tháng</h3><div style={{ maxHeight: 320, overflowY: 'auto', overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: 10 }}><table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 650 }}><thead><tr>{['Thành viên', 'Được phân công', 'Có mặt', 'Đi trễ', 'Vắng mặt', 'Có phép', 'Tỷ lệ tham gia'].map(heading => <th key={heading} style={{ textAlign: 'left', padding: 10, borderBottom: '1px solid #ddd', fontSize: 12, position: 'sticky', top: 0, background: '#f8fafc', zIndex: 1 }}>{heading}</th>)}</tr></thead><tbody>{stats.map(item => <tr key={item.name}><td style={{ padding: 10 }}>{item.name}</td><td style={{ padding: 10 }}>{item.assignedCount}</td><td style={{ padding: 10 }}>{item.present}</td><td style={{ padding: 10 }}>{item.late}</td><td style={{ padding: 10 }}>{item.absent}</td><td style={{ padding: 10 }}>{item.excused}</td><td style={{ padding: 10, fontWeight: 600, color: '#059669' }}>{item.rate.toFixed(1)}%</td></tr>)}</tbody></table></div></div>
-    </section>
-  );
+      <div style={{ marginBottom: 16 }}>
+        <label style={{ display: 'block', marginBottom: 8 }}>Chọn ngày trực</label>
+        <select value={selectedDay} onChange={(event) => setSelectedDay(event.target.value)} disabled={!days.length} style={{ padding: 10, borderRadius: 8, width: '100%' }}>
+          {days.map((day) => (<option key={day} value={day}>{fmt(day)}</option>))}
+        </select>
+      </div>
+
+      <div style={{ marginBottom: 20 }}>
+        <label style={{ display: 'block', marginBottom: 8 }}>Chọn ca trực</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {SHIFTS.map((shift) => (<button type="button" key={shift} onClick={() => setSelectedShift(shift)} className={selectedShift === shift ? 'primary' : 'secondary'}>
+              {shift}
+            </button>))}
+        </div>
+      </div>
+
+      <div>
+        <h4>Danh sách ca {selectedShift}</h4>
+
+        {students.length ? (students.map((name) => (<div key={name} style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+                padding: '12px 0',
+                borderBottom: '1px solid #e5e7eb',
+                flexWrap: 'wrap'
+            }}>
+              <b>{name}</b>
+              <select value={data.attendance?.[selectedDay]?.[selectedShift]?.[name] || ''} onChange={(event) => updateAttendance(name, event.target.value)} style={{ padding: 9, borderRadius: 8, minWidth: 160 }}>
+                <option value="">Chưa điểm danh</option>
+                {statuses.map((status) => (<option key={status} value={status}>{status}</option>))}
+              </select>
+            </div>))) : (<div className="empty">
+            Chưa có Thành viên được phân công trong ca này.
+          </div>)}
+      </div>
+
+      <div style={{ marginTop: 28 }}>
+        <h3>Thống kê điểm danh tháng</h3>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{
+            width: '100%',
+            borderCollapse: 'collapse',
+            minWidth: 650
+        }}>
+            <thead>
+              <tr>
+                {[
+            'Thành viên',
+            'Được phân công',
+            'Có mặt',
+            'Đi trễ',
+            'Vắng mặt',
+            'Có phép',
+            'Tỷ lệ tham gia'
+        ].map((heading) => (<th key={heading} style={{
+                textAlign: 'left',
+                padding: 10,
+                borderBottom: '1px solid #ddd',
+                fontSize: 12
+            }}>
+                    {heading}
+                  </th>))}
+              </tr>
+            </thead>
+            <tbody>
+              {stats.map((item) => (<tr key={item.name}>
+                  <td style={{ padding: 10 }}>{item.name}</td>
+                  <td style={{ padding: 10 }}>{item.assignedCount}</td>
+                  <td style={{ padding: 10 }}>{item.present}</td>
+                  <td style={{ padding: 10 }}>{item.late}</td>
+                  <td style={{ padding: 10 }}>{item.absent}</td>
+                  <td style={{ padding: 10 }}>{item.excused}</td>
+                  <td style={{ padding: 10 }}>{item.rate.toFixed(1)}%</td>
+                </tr>))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>);
 }
