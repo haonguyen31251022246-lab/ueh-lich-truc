@@ -176,14 +176,14 @@ export default function App() {
         });
         setNotice('Đã cập nhật phân công. Tháng này cần công bố lại.');
     };
-    // Đề xuất phân công tự động theo 4 tiêu chí công bằng trong tháng đang chọn.
+    // Đề xuất phân công: cân bằng tỷ lệ và hướng tới chênh lệch không quá 5 điểm phần trăm.
     const suggest = () => {
         const n = structuredClone(data);
         const counts = Object.fromEntries(STUDENTS.map((s) => [s, 0]));
         const availabilityCounts = Object.fromEntries(STUDENTS.map((s) => [s, 0]));
         const lastAssigned = Object.fromEntries(STUDENTS.map((s) => [s, -1]));
 
-        // Chỉ xét dữ liệu của tháng đang chọn để mỗi tháng có cơ hội cân bằng lại.
+        // Tính số ca đã được giao và số buổi rảnh trong riêng tháng đang chọn.
         days.forEach((day, dayIndex) => {
             SHIFTS.forEach((sh) => {
                 (avail(n, day, sh) || []).forEach((name) => {
@@ -196,45 +196,55 @@ export default function App() {
             });
         });
 
-        // Xét lần lượt từng ngày/ca; sau mỗi lượt chọn, cập nhật số ca để lượt sau cân bằng hơn.
+        // Xét từng ca. Không giới hạn số ca một người có thể nhận trong cùng ngày hoặc trong tháng.
         days.forEach((day, dayIndex) => {
             n.assignments[day] ??= {};
             SHIFTS.forEach((sh) => {
                 const old = n.assignments[day][sh] || [];
-                // Mỗi thành viên chỉ được nhận tối đa 1 ca trong cùng một ngày,
-                // bất kể họ đã đăng ký rảnh ở Sáng, Chiều hay Tối.
-                const alreadyAssignedToday = new Set(
-                    SHIFTS.flatMap((shift) => n.assignments[day]?.[shift] || [])
-                );
-                const candidates = avail(n, day, sh)
-                    .filter((name) => !alreadyAssignedToday.has(name))
-                    .sort((a, b) => {
-                        // 1) Tỷ lệ phân công thấp hơn được ưu tiên.
-                        const rateA = (counts[a] || 0) / Math.max(1, availabilityCounts[a] || 0);
-                        const rateB = (counts[b] || 0) / Math.max(1, availabilityCounts[b] || 0);
-                        if (rateA !== rateB) return rateA - rateB;
-                        // 2) Nếu tỷ lệ bằng nhau, ưu tiên người có ít ca hơn.
+                const selected = new Set(old);
+                const slotsNeeded = Math.max(0, n.target - old.length);
+
+                for (let i = 0; i < slotsNeeded; i++) {
+                    const candidates = (avail(n, day, sh) || []).filter((name) => !selected.has(name));
+                    if (!candidates.length) break;
+
+                    // Xếp theo tỷ lệ dự kiến SAU KHI nhận ca này; sau đó dùng 3 tiêu chí phụ.
+                    candidates.sort((a, b) => {
+                        const rateA = ((counts[a] || 0) + 1) / Math.max(1, availabilityCounts[a] || 0);
+                        const rateB = ((counts[b] || 0) + 1) / Math.max(1, availabilityCounts[b] || 0);
+                        if (Math.abs(rateA - rateB) > 1e-9) return rateA - rateB;
                         const countDiff = (counts[a] || 0) - (counts[b] || 0);
                         if (countDiff) return countDiff;
-                        // 3) Nếu vẫn bằng nhau, ưu tiên người có ít buổi rảnh hơn.
                         const availabilityDiff = (availabilityCounts[a] || 0) - (availabilityCounts[b] || 0);
                         if (availabilityDiff) return availabilityDiff;
-                        // 4) Nếu vẫn bằng nhau, ưu tiên người lâu chưa được phân công (hoặc chưa từng được phân công).
+                        // Người lâu chưa được phân công được ưu tiên; chưa từng được phân công đứng trước.
                         return (lastAssigned[a] ?? -1) - (lastAssigned[b] ?? -1);
                     });
-                const add = candidates.slice(0, Math.max(0, n.target - old.length));
-                n.assignments[day][sh] = [...old, ...add];
-                add.forEach((name) => {
-                    counts[name] = (counts[name] || 0) + 1;
-                    lastAssigned[name] = dayIndex;
-                });
+
+                    const chosen = candidates[0];
+                    old.push(chosen);
+                    selected.add(chosen);
+                    counts[chosen] = (counts[chosen] || 0) + 1;
+                    lastAssigned[chosen] = dayIndex;
+                }
+                n.assignments[day][sh] = old;
             });
         });
-        // Mở khóa đúng tháng đang đề xuất.
+
+        // Kiểm tra mức chênh lệch sau khi đề xuất. 5% ở đây được hiểu là 5 điểm phần trăm.
+        const rates = STUDENTS
+            .filter((name) => (availabilityCounts[name] || 0) > 0)
+            .map((name) => (counts[name] || 0) / availabilityCounts[name]);
+        const spread = rates.length ? Math.max(...rates) - Math.min(...rates) : 0;
+
         n.publishedMonths ??= {};
         delete n.publishedMonths[month];
         setData(n);
-        setNotice('Đã tạo đề xuất theo 4 tiêu chí; mỗi thành viên tối đa 1 ca/ngày. Thầy cô hãy kiểm tra trước khi công bố.');
+        if (spread > 0.050001) {
+            setNotice(`Đã tạo đề xuất và ưu tiên cân bằng tỷ lệ. Chênh lệch hiện tại là ${(spread * 100).toFixed(1)} điểm phần trăm, vượt mục tiêu 5 điểm phần trăm do lịch rảnh và nhu cầu ca trực chưa cho phép cân bằng hoàn toàn. Thầy cô vui lòng kiểm tra.`);
+        } else {
+            setNotice(`Đã tạo đề xuất. Chênh lệch tỷ lệ phân công hiện tại là ${(spread * 100).toFixed(1)} điểm phần trăm, nằm trong mục tiêu 5 điểm phần trăm.`);
+        }
     };
     // Xuất file Excel.
     const exportExcel = () => {
