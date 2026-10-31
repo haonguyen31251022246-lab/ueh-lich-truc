@@ -386,12 +386,12 @@ sheets.forEach(([name, rows]) => {
           onClick={() => setRole('admin')}
         >
           <ClipboardList />
-          Quản lý / Thầy cô
+          Thầy cô
         </button>
         <div className="side-note">
           <ShieldCheck />
           <span>
-            <b>Bản demo</b>
+            <b>Test</b>
             <small>Dữ liệu lưu trên trình duyệt hiện tại.</small>
           </span>
         </div>
