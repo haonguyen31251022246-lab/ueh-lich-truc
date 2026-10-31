@@ -180,11 +180,20 @@ export default function App() {
     const suggest = () => {
         const n = structuredClone(data);
         const counts = Object.fromEntries(STUDENTS.map((s) => [s, 0]));
-        // Đếm số ca đã được phân công.
+        const availabilityCounts = Object.fromEntries(STUDENTS.map((s) => [s, 0]));
+        // Tiêu chí 1: đếm tổng số ca đã được phân công của từng thành viên.
         Object.values(n.assignments).forEach((x) => {
             SHIFTS.forEach((sh) => {
                 (x?.[sh] || []).forEach((s) => {
                     counts[s] = (counts[s] || 0) + 1;
+                });
+            });
+        });
+        // Tiêu chí 2: đếm tổng số buổi rảnh mà từng thành viên đã tick.
+        Object.values(n.availability || {}).forEach((dayData) => {
+            SHIFTS.forEach((sh) => {
+                (dayData?.[sh] || []).forEach((s) => {
+                    availabilityCounts[s] = (availabilityCounts[s] || 0) + 1;
                 });
             });
         });
@@ -195,7 +204,11 @@ export default function App() {
                 const old = n.assignments[day][sh] || [];
                 const candidates = avail(n, day, sh)
                     .filter((s) => !old.includes(s))
-                    .sort((a, b) => (counts[a] || 0) - (counts[b] || 0));
+                    // Ưu tiên tiêu chí 1 trước; chỉ khi bằng nhau mới xét tiêu chí 2.
+                    .sort((a, b) =>
+                        (counts[a] || 0) - (counts[b] || 0) ||
+                        (availabilityCounts[a] || 0) - (availabilityCounts[b] || 0)
+                    );
                 const add = candidates.slice(0, Math.max(0, n.target - old.length));
                 n.assignments[day][sh] = [...old, ...add];
                 add.forEach((s) => {
