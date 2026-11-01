@@ -4,6 +4,11 @@ import { CalendarDays, Users, ClipboardList, CheckCircle2, ChevronLeft, ChevronR
 import { supabase } from './lib/supabase';
 import uehLogo from './images/UEH.jpg';
 const SHIFTS = ['Sáng', 'Chiều', 'Tối'];
+// Thứ Bảy và Chủ nhật chỉ có ca Tối.
+const shiftsForDay = (day) => {
+    const weekday = new Date(day + 'T00:00:00').getDay();
+    return weekday === 0 || weekday === 6 ? ['Tối'] : SHIFTS;
+};
 const STUDENTS = [
     'Nguyễn Xuân Quang', 'Trần Lư Vĩ Tài', 'Đoàn Thu Hằng', 'Nguyễn Thành Khánh Hưng',
     'Vũ Hải Đăng', 'Thái Hùng', 'Nguyễn Hải Hào', 'Phạm Hoàng Lan Phương',
@@ -193,7 +198,7 @@ export default function App() {
         days.forEach((day) => { delete n.assignments[day]; });
 
         // Mẫu số: tổng số ca thành viên đã đăng ký rảnh trong tháng.
-        days.forEach((day) => SHIFTS.forEach((shift) => {
+        days.forEach((day) => shiftsForDay(day).forEach((shift) => {
             (avail(n, day, shift) || []).forEach((name) => {
                 if (availabilityCounts[name] !== undefined) availabilityCounts[name]++;
             });
@@ -201,7 +206,7 @@ export default function App() {
 
         // Xếp các ca ít người đăng ký trước để ưu tiên những ca khó bố trí.
         const slots = [];
-        days.forEach((day) => SHIFTS.forEach((shift) => {
+        days.forEach((day) => shiftsForDay(day).forEach((shift) => {
             const candidates = [...new Set(avail(n, day, shift) || [])]
                 .filter((name) => STUDENTS.includes(name));
             slots.push({ day, shift, candidates });
@@ -261,7 +266,7 @@ export default function App() {
             };
         });
         days.forEach((d) => {
-            SHIFTS.forEach((s) => {
+            shiftsForDay(d).forEach((s) => {
                 const available = avail(data, d, s);
                 const assignedMembers = assigned(data, d, s);
                 available.forEach((name) => {
@@ -365,11 +370,11 @@ export default function App() {
         XLSX.writeFile(workbook, `UEH-tong-hop-lich-truc-${month}.xlsx`);
     };
     // Danh sách ca trực của Thành viên.
-    const myAssignments = days.flatMap((d) => SHIFTS.filter((s) => assigned(data, d, s).includes(student))
+    const myAssignments = days.flatMap((d) => shiftsForDay(d).filter((s) => assigned(data, d, s).includes(student))
         .map((s) => ({ day: d, shift: s })));
     // Thống kê tổng lượt đăng ký và phân công.
-    const totalAvail = days.reduce((n, d) => n + SHIFTS.reduce((x, s) => x + avail(data, d, s).length, 0), 0);
-    const totalAssigned = days.reduce((n, d) => n + SHIFTS.reduce((x, s) => x + assigned(data, d, s).length, 0), 0);
+    const totalAvail = days.reduce((n, d) => n + shiftsForDay(d).reduce((x, s) => x + avail(data, d, s).length, 0), 0);
+    const totalAssigned = days.reduce((n, d) => n + shiftsForDay(d).reduce((x, s) => x + assigned(data, d, s).length, 0), 0);
     // Công bố lịch tháng hiện tại.
     const publishMonth = () => {
         setData((p) => ({
@@ -517,7 +522,7 @@ export default function App() {
                         </small>
                       </div>
 
-                      {SHIFTS.map((sh) => {
+                      {shiftsForDay(d).map((sh) => {
                         const on = avail(data, d, sh).includes(student);
                         const as = assigned(data, d, sh).includes(student);
                         return (<button disabled={isPublished} onClick={() => toggleAvail(d, sh)} className={`shift ${on ? 'on' : ''} ${as ? 'as' : ''}`} key={sh}>
@@ -532,7 +537,7 @@ export default function App() {
               <div className="footnote">
                 Đã chọn{' '}
                 <b>
-                  {days.reduce((n, d) => n + SHIFTS.filter((s) => avail(data, d, s).includes(student)).length, 0)}
+                  {days.reduce((n, d) => n + shiftsForDay(d).filter((s) => avail(data, d, s).includes(student)).length, 0)}
                 </b>{' '}
                 khung giờ · Dữ liệu tự lưu trên máy chủ
               </div>
@@ -647,7 +652,7 @@ function AdminDays({ days, data, toggleAssign }) {
 
       <div className="day-picker">
         {days.map((d) => {
-          const hasShortage = SHIFTS.some((sh) => assigned(data, d, sh).length < (Number(data.target) || 0));
+          const hasShortage = shiftsForDay(d).some((sh) => assigned(data, d, sh).length < (Number(data.target) || 0));
           return (<button
             className={day === d ? 'chosen' : ''}
             style={hasShortage ? { background: day === d ? '#b91c1c' : '#fee2e2', color: day === d ? '#fff' : '#b91c1c', border: '1px solid #ef4444', fontWeight: 700 } : undefined}
@@ -661,7 +666,7 @@ function AdminDays({ days, data, toggleAssign }) {
       </div>
 
       <div className="shift-admin">
-        {SHIFTS.map((sh) => {
+        {shiftsForDay(day).map((sh) => {
             const a = avail(data, day, sh);
             const picked = assigned(data, day, sh);
             const hasShortage = picked.length < (Number(data.target) || 0);
@@ -701,7 +706,7 @@ function StudentStats({ days, data }) {
         const availableDays = new Set();
 
         days.forEach((day) => {
-            SHIFTS.forEach((shift) => {
+            shiftsForDay(day).forEach((shift) => {
                 const availableStudents = data.availability?.[day]?.[shift] || [];
                 const assignedStudents = data.assignments?.[day]?.[shift] || [];
                 if (availableStudents.includes(name)) {
@@ -787,11 +792,16 @@ function StudentStats({ days, data }) {
 }
 function Attendance({ days, data, setData }) {
     const [selectedDay, setSelectedDay] = useState(days[0] || '');
-    const [selectedShift, setSelectedShift] = useState('Sáng');
+    const [selectedShift, setSelectedShift] = useState('Tối');
     useEffect(() => {
         if (days.length && !days.includes(selectedDay))
             setSelectedDay(days[0]);
     }, [days, selectedDay]);
+    useEffect(() => {
+        if (selectedDay && !shiftsForDay(selectedDay).includes(selectedShift)) {
+            setSelectedShift('Tối');
+        }
+    }, [selectedDay, selectedShift]);
     const students = data.assignments?.[selectedDay]?.[selectedShift] || [];
     const statuses = ['Có mặt', 'Vắng mặt', 'Có phép', 'Đi trễ'];
     const updateAttendance = (name, status) => {
@@ -816,7 +826,7 @@ function Attendance({ days, data, setData }) {
         let excused = 0;
         let late = 0;
         days.forEach((day) => {
-            SHIFTS.forEach((shift) => {
+            shiftsForDay(day).forEach((shift) => {
                 const roster = data.assignments?.[day]?.[shift] || [];
                 if (roster.includes(name)) {
                     assignedCount += 1;
@@ -856,7 +866,7 @@ function Attendance({ days, data, setData }) {
       <div style={{ marginBottom: 20 }}>
         <label style={{ display: 'block', marginBottom: 8 }}>Chọn ca trực</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {SHIFTS.map((shift) => (<button type="button" key={shift} onClick={() => setSelectedShift(shift)} className={selectedShift === shift ? 'primary' : 'secondary'}>
+          {shiftsForDay(selectedDay).map((shift) => (<button type="button" key={shift} onClick={() => setSelectedShift(shift)} className={selectedShift === shift ? 'primary' : 'secondary'}>
               {shift}
             </button>))}
         </div>
