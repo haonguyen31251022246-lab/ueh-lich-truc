@@ -14,7 +14,7 @@ const STUDENTS = [
     'Vũ Hải Đăng', 'Thái Hùng', 'Nguyễn Hải Hào', 'Phạm Hoàng Lan Phương',
     'Ngô Việt Ngân', 'Lý Gia Hân', 'Phạm Thanh Nguyên', 'Võ Thị Tố Nga',
     'Ngô Thùy Dương', 'Nguyễn Hồ Uyên Thư', 'Phạm Thị Trúc Đào', 'Nguyễn Phú Hội',
-    'Đỗ Thị Hồng Ngọc', 'Nguyễn Văn Gia Khánh', 'Dương Song Huy', 'Lê Hoàng Thảo Linh'
+    'Đỗ Thị Hồng Ngọc', 'Nguyễn Văn Gia Khánh', 'Dương Song Huy', 'Lê Hoàng Thảo Linh', 'Thảo Nguyên'
 ];
 const initial = {
     availability: {},
