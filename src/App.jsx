@@ -646,19 +646,33 @@ function AdminDays({ days, data, toggleAssign }) {
       </div>
 
       <div className="day-picker">
-        {days.map((d) => (<button className={day === d ? 'chosen' : ''} onClick={() => setDay(d)} key={d}>
+        {days.map((d) => {
+          const hasShortage = SHIFTS.some((sh) => assigned(data, d, sh).length < (Number(data.target) || 0));
+          return (<button
+            className={day === d ? 'chosen' : ''}
+            style={hasShortage ? { background: day === d ? '#b91c1c' : '#fee2e2', color: day === d ? '#fff' : '#b91c1c', border: '1px solid #ef4444', fontWeight: 700 } : undefined}
+            onClick={() => setDay(d)}
+            key={d}
+            title={hasShortage ? 'Có ít nhất một ca chưa đủ người' : 'Các ca đã đủ người'}
+          >
             {Number(d.slice(-2))}
-          </button>))}
+          </button>);
+        })}
       </div>
 
       <div className="shift-admin">
         {SHIFTS.map((sh) => {
             const a = avail(data, day, sh);
             const picked = assigned(data, day, sh);
-            return (<div className="shiftbox" key={sh}>
+            const hasShortage = picked.length < (Number(data.target) || 0);
+            return (<div
+              className="shiftbox"
+              key={sh}
+              style={hasShortage ? { border: '1.5px solid #ef4444', background: '#fff1f2', borderRadius: 12, padding: 12 } : undefined}
+            >
               <div className="shiftbox-title">
-                <b>Ca {sh}</b>
-                <span>{picked.length}/{data.target} được phân công</span>
+                <b style={hasShortage ? { color: '#b91c1c' } : undefined}>Ca {sh}{hasShortage ? ' – THIẾU NGƯỜI' : ''}</b>
+                <span style={hasShortage ? { color: '#b91c1c', fontWeight: 700 } : undefined}>{picked.length}/{data.target} được phân công</span>
               </div>
 
               <small className="subhead">Thành viên ĐĂNG KÝ RẢNH</small>
