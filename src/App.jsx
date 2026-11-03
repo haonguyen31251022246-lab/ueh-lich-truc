@@ -17,6 +17,8 @@ const initial = {
     assignments: {},
     publishedMonths: {},
     attendance: {},
+    busy: {},
+    notificationEmails: [],
     target: 2
 };
 const key = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
@@ -43,6 +45,8 @@ export default function App() {
     const [student, setStudent] = useState(STUDENTS[0]);
     const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
     const [notice, setNotice] = useState('');
+    const [busyMode, setBusyMode] = useState(false);
+    const [emailDraft, setEmailDraft] = useState('');
     // Dùng để tránh ghi ngược dữ liệu vừa nhận từ máy chủ.
     const skipNextSave = useRef(false);
     // Dùng để phân biệt dữ liệu mới nhất nếu có nhiều sự kiện Realtime.
@@ -167,6 +171,46 @@ export default function App() {
         });
         setNotice('Đã lưu lựa chọn thời gian rảnh.');
     };
+    // Thành viên bật/tắt báo bận cho ngày và ca đang chọn.
+    const toggleBusy = async (day, shift) => {
+        setData((p) => {
+            const n = structuredClone(p);
+            n.busy ??= {};
+            n.busy[day] ??= {};
+            const current = n.busy[day][shift] || [];
+            n.busy[day][shift] = current.includes(student)
+                ? current.filter((name) => name !== student)
+                : [...current, student];
+            return n;
+        });
+        setNotice('Đã cập nhật trạng thái báo bận.');
+        // Hàm Edge Function sẽ gửi email sau khi được cấu hình và triển khai.
+        try {
+            const { error } = await supabase.functions.invoke('notify-busy', {
+                body: { member: student, day, shift, action: (data.busy?.[day]?.[shift] || []).includes(student) ? 'cancel' : 'busy', recipients: data.notificationEmails || [] }
+            });
+            if (error) console.warn('Chưa gửi được email báo bận:', error.message);
+        } catch (error) {
+            console.warn('Chức năng gửi email chưa được cấu hình:', error);
+        }
+    };
+    const addNotificationEmail = () => {
+        const email = emailDraft.trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            setNotice('Vui lòng nhập địa chỉ email hợp lệ.');
+            return;
+        }
+        if ((data.notificationEmails || []).includes(email)) {
+            setNotice('Email này đã có trong danh sách.');
+            return;
+        }
+        setData((p) => ({ ...p, notificationEmails: [...(p.notificationEmails || []), email] }));
+        setEmailDraft('');
+        setNotice('Đã thêm email nhận thông báo.');
+    };
+    const removeNotificationEmail = (email) => setData((p) => ({
+        ...p, notificationEmails: (p.notificationEmails || []).filter((item) => item !== email)
+    }));
     // Giáo viên thêm hoặc bỏ Thành viên khỏi ca trực.
     const toggleAssign = (day, shift, name) => {
         setData((p) => {
@@ -477,6 +521,9 @@ export default function App() {
                 <select value={student} onChange={(e) => setStudent(e.target.value)}>
                   {STUDENTS.map((s) => <option key={s}>{s}</option>)}
                 </select>
+                <button className={busyMode ? 'secondary' : 'primary'} style={{ marginTop: 8 }} onClick={() => setBusyMode((v) => !v)}>
+                  {busyMode ? 'Tắt chế độ báo bận' : 'Báo bận'}
+                </button>
               </div>
               <p>
                 <i className="green-dot"/> Đã chọn rảnh
@@ -488,7 +535,7 @@ export default function App() {
               <div className="panel-title">
                 <div>
                   <h3><CalendarDays /> Lịch đăng ký theo tháng</h3>
-                  <p>Nhấn vào ca để đánh dấu thời gian bạn có thể tham gia.</p>
+                  <p>{busyMode ? 'Chọn các ca bạn đang bận để thông báo cho thầy cô.' : 'Nhấn vào ca để đánh dấu thời gian bạn có thể tham gia.'}</p>
                 </div>
                 <span className="tag">SÁNG · CHIỀU · TỐI</span>
               </div>
@@ -511,9 +558,10 @@ export default function App() {
                       {SHIFTS.map((sh) => {
                         const on = avail(data, d, sh).includes(student);
                         const as = assigned(data, d, sh).includes(student);
-                        return (<button disabled={isPublished} onClick={() => toggleAvail(d, sh)} className={`shift ${on ? 'on' : ''} ${as ? 'as' : ''}`} key={sh}>
-                            {sh}
-                            {on ? <CheckCircle2 /> : <span className="circle"/>}
+                        const busy = (data.busy?.[d]?.[sh] || []).includes(student);
+                        return (<button disabled={isPublished} onClick={() => busyMode ? toggleBusy(d, sh) : toggleAvail(d, sh)} className={`shift ${busy ? 'busy' : ''} ${on ? 'on' : ''} ${as ? 'as' : ''}`} key={sh}>
+                            {sh}{busy ? ' · Bận' : ''}
+                            {busy ? <span>!</span> : on ? <CheckCircle2 /> : <span className="circle"/>}
                           </button>);
                     })}
                     </div>);
@@ -583,6 +631,20 @@ export default function App() {
             </section>
 
             <AdminDays days={days} data={data} toggleAssign={toggleAssign}/>
+            <section className="panel">
+              <div className="panel-title"><div><h3><CalendarCheck /> Các ca đang có người báo bận</h3><p>Danh sách tổng hợp theo tháng đang xem.</p></div></div>
+              {days.some((d) => SHIFTS.some((sh) => (data.busy?.[d]?.[sh] || []).length)) ? days.map((d) => SHIFTS.filter((sh) => (data.busy?.[d]?.[sh] || []).length).map((sh) => (
+                <div className="assign-row" key={d + sh}><b>{fmt(d)}</b><span>Ca {sh}</span><em>{(data.busy?.[d]?.[sh] || []).join(', ')}</em></div>
+              ))) : <p className="empty">Chưa có thành viên báo bận trong tháng này.</p>}
+            </section>
+            <section className="panel">
+              <div className="panel-title"><div><h3><Send /> Gmail nhận thông báo</h3><p>Thêm, sửa hoặc xóa địa chỉ nhận email báo bận.</p></div></div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input type="email" value={emailDraft} onChange={(e) => setEmailDraft(e.target.value)} placeholder="Nhập địa chỉ Gmail" style={{ flex: '1 1 240px', minWidth: 0 }} />
+                <button className="primary" onClick={addNotificationEmail}>Thêm Gmail</button>
+              </div>
+              {(data.notificationEmails || []).length ? (data.notificationEmails || []).map((email) => <div className="assign-row" key={email}><b>{email}</b><span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}><button className="secondary" onClick={() => { const next = window.prompt('Sửa địa chỉ Gmail:', email); if (next === null) return; const value = next.trim().toLowerCase(); if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) { setNotice('Địa chỉ email không hợp lệ.'); return; } setData((p) => ({ ...p, notificationEmails: [...new Set((p.notificationEmails || []).map((x) => x === email ? value : x))] })); }}>Sửa</button><button className="secondary" onClick={() => removeNotificationEmail(email)}>Xóa</button></span></div>) : <p className="empty">Chưa có Gmail nhận thông báo.</p>}
+            </section>
             <Attendance days={days} data={data} setData={setData}/>
             <StudentStats days={days} data={data}/>
 
