@@ -26,7 +26,6 @@ const MALE_STUDENTS = [
   'Nguyễn Hải Hào',
   'Nguyễn Phú Hội',
   'Nguyễn Văn Gia Khánh',
-  'Dương Song Huy'
 ];
 const initial = {
   availability: {},

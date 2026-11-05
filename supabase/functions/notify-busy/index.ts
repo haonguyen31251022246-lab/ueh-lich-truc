@@ -38,8 +38,8 @@ Deno.serve(async (req) => {
     });
     const tokenData = await tokenResponse.json();
     if (!tokenResponse.ok || !tokenData.access_token) throw new Error('Không lấy được quyền gửi Gmail.');
-
-    const dateText = new Date(`${day}T00:00:00+07:00`).toLocaleDateString('vi-VN');
+    const [year, month, date] = day.split('-');
+    const dateText = `${date}/${month}/${year}`;
     const subject = `Thông báo ${action === 'cancel' ? 'hủy báo bận' : 'báo bận'}: ${member}`;
     const body = `${member} đã ${action === 'cancel' ? 'hủy trạng thái báo bận' : 'báo bận'} ngày ${dateText}, ca ${shift}.`;
     const rawText = [`From: ${sender}`, `To: ${emails.join(', ')}`, `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`, 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', btoa(unescape(encodeURIComponent(body)))].join('\r\n');
