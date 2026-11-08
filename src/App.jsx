@@ -12,7 +12,7 @@ const SHIFTS = ['Sáng', 'Chiều', 'Tối'];
 const STUDENTS = [
   'Nguyễn Xuân Quang', 'Trần Lư Vĩ Tài', 'Đoàn Thu Hằng', 'Nguyễn Thành Khánh Hưng',
   'Vũ Hải Đăng', 'Thái Hùng', 'Nguyễn Hải Hào', 'Phạm Hoàng Lan Phương',
-  'Ngô Việt Ngân', 'Lý Gia Hân', 'Phạm Thanh Nguyên', 'Võ Thị Tố Nga',
+  'Ngô Việt Ngân', 'Lý Gia Hân', 'Phan Thanh Nguyên', 'Võ Thị Tố Nga',
   'Ngô Thùy Dương', 'Nguyễn Hồ Uyên Thư', 'Phạm Thị Trúc Đào', 'Nguyễn Phú Hội',
   'Đỗ Thị Hồng Ngọc', 'Nguyễn Văn Gia Khánh', 'Dương Song Huy', 'Lê Hoàng Thảo Linh',
   'Thảo Nguyên'
@@ -311,168 +311,221 @@ export default function App() {
   setNotice('Đã cập nhật phân công. Tháng này cần công bố lại.');
 };
   // Đề xuất phân công tự động.
-
 const suggest = () => {
   const n = structuredClone(data);
-
-  const availabilityCounts = Object.fromEntries(
-    STUDENTS.map((name) => [name, 0])
-  );
-
-  const assignedCounts = Object.fromEntries(
-    STUDENTS.map((name) => [name, 0])
-  );
-
-  // Xóa phân công cũ trong tháng hiện tại.
-  days.forEach((day) => {
+  const target = Math.max(1, Number(n.target) || 2);
+  const MAX_TRIALS = 500;
+  const FAIRNESS_LIMIT = 0.05;
+  // Xóa phân công cũ của riêng tháng đang xem.
+  days.forEach(day => {
     delete n.assignments[day];
   });
-
-  // Tính số ca đăng ký rảnh của từng thành viên.
-  days.forEach((day) =>
-    SHIFTS.forEach((shift) => {
-      (avail(n, day, shift) || []).forEach((name) => {
-        if (availabilityCounts[name] !== undefined) {
-          availabilityCounts[name]++;
-        }
-      });
-    })
+  // Đếm số ca rảnh thực tế của từng thành viên.
+  // Ca đã báo bận sẽ không được tính là cơ hội phân công.
+  const availabilityCounts = Object.fromEntries(
+    STUDENTS.map(name => [name, 0])
   );
-
-  // Tạo danh sách ca trực.
   const slots = [];
-
-  days.forEach((day) =>
-    SHIFTS.forEach((shift) => {
-      const candidates = [...new Set(avail(n, day, shift) || [])]
-        .filter((name) => STUDENTS.includes(name));
-
-      slots.push({ day, shift, candidates });
-    })
-  );
-
-  // Xác định thứ tự luân phiên ca tối theo ngày.
-  const nightDays = [...new Set(
-    days.filter((day) => true)
-  )].sort();
-
-  const nightPattern = Object.fromEntries(
-    nightDays.map((day, index) => [
-      day,
-      index % 2 === 0 ? 'twoMale' : 'mixed'
-    ])
-  );
-
-  // Ưu tiên ca có ít người đăng ký trước.
-  slots.sort((a, b) =>
-    a.candidates.length - b.candidates.length ||
-    a.day.localeCompare(b.day) ||
-    SHIFTS.indexOf(a.shift) - SHIFTS.indexOf(b.shift)
-  );
-
-  const target = Math.max(0, Number(n.target) || 0);
-
-  // Chọn thành viên theo tỷ lệ phân công để cân bằng.
-  const pickBalanced = (pool, selected) => {
-    const remaining = pool.filter(
-      (name) => !selected.includes(name)
-    );
-
-    remaining.sort((a, b) => {
-      const rateA = (assignedCounts[a] + 1) /
-        Math.max(1, availabilityCounts[a]);
-
-      const rateB = (assignedCounts[b] + 1) /
-        Math.max(1, availabilityCounts[b]);
-
-      if (Math.abs(rateA - rateB) > 1e-9) {
-        return rateA - rateB;
-      }
-
-      if (assignedCounts[a] !== assignedCounts[b]) {
-        return assignedCounts[a] - assignedCounts[b];
-      }
-
-      return availabilityCounts[b] - availabilityCounts[a];
-    });
-
-    if (!remaining.length) return;
-
-    const chosen = remaining[0];
-    selected.push(chosen);
-    assignedCounts[chosen]++;
-  };
-  slots.forEach(({ day, shift, candidates }) => {
-    const selected = [];
-    if (shift === 'Tối') {
-  const males = candidates.filter((name) =>
-    MALE_STUDENTS.includes(name)
-  );
-  const females = candidates.filter((name) =>
-    !MALE_STUDENTS.includes(name)
-  );
-  // Bắt buộc mỗi ca tối có đúng 1 nam và 1 nữ.
-  if (males.length >= 1 && females.length >= 1) {
-    pickBalanced(males, selected);
-    pickBalanced(females, selected);
-  }
-  // Nếu thiếu nam hoặc nữ thì để ca trống.
-} else {
-  // Ca sáng và chiều giữ nguyên cách phân công cũ.
-  for (let seat = 0; seat < target; seat++) {
-    pickBalanced(candidates, selected);
-    if (selected.length === seat) break;
-  }
-}
-n.assignments[day] ??= {};
-n.assignments[day][shift] = selected;
-});
-  // Tính độ chênh tỷ lệ phân công.
-  const rates = STUDENTS
-    .filter((name) => availabilityCounts[name] > 0)
-    .map((name) =>
-      assignedCounts[name] / availabilityCounts[name]
-    );
-
-  const spread = rates.length > 1
-    ? Math.max(...rates) - Math.min(...rates)
-    : 0;
-
-  // Tính số vị trí còn thiếu người.
-  const unfilled = slots.reduce((sum, slot) => {
-    const slotTarget = slot.shift === 'Tối' ? 2 : target;
-
-    return sum + Math.max(
-      0,
-      slotTarget -
-        (n.assignments?.[slot.day]?.[slot.shift]?.length || 0)
-    );
-  }, 0);
-
-  // Tìm các ca tối không có nam đăng ký rảnh.
-  const missingMaleDays = slots
-    .filter((slot) =>
-      slot.shift === 'Tối' &&
-      !slot.candidates.some((name) =>
+  days.forEach(day => {
+    SHIFTS.forEach(shift => {
+      const busyMembers = new Set(
+        n.busy?.[day]?.[shift] || []
+      );
+      const candidates = [
+        ...new Set(avail(n, day, shift) || [])
+      ].filter(name =>
+        STUDENTS.includes(name) &&
+        !busyMembers.has(name)
+      );
+      candidates.forEach(name => {
+        availabilityCounts[name]++;
+      });
+      const males = candidates.filter(name =>
         MALE_STUDENTS.includes(name)
-      )
-    )
-    .map((slot) => slot.day)
-    .sort();
+      );
+      const females = candidates.filter(name =>
+        !MALE_STUDENTS.includes(name)
+      );
+      slots.push({
+        day,
+        shift,
+        candidates,
+        difficulty: shift === 'Tối'
+          ? Math.min(males.length, females.length)
+          : candidates.length
+      });
+    });
+  });
+  let best = null;
+  // Chạy nhiều phương án với thứ tự xét ca khác nhau.
+  for (let trial = 0; trial < MAX_TRIALS; trial++) {
+    const trialAssignments = {};
+    const assignedCounts = Object.fromEntries(
+      STUDENTS.map(name => [name, 0])
+    );
+    const usedByDay = {};
+    days.forEach(day => {
+      trialAssignments[day] = {};
+      usedByDay[day] = new Set();
+    });
+    // Xáo trộn nhẹ thứ tự các ca có độ khó gần nhau.
+    const orderedSlots = [...slots].sort((a, b) =>
+      (a.difficulty + Math.random() * 1.5) -
+      (b.difficulty + Math.random() * 1.5)
+    );
+    // Chọn người có tỷ lệ phân công dự kiến thấp nhất.
+    const chooseMember = pool => {
+      const available = pool.filter(name =>
+        assignedCounts[name] < availabilityCounts[name]
+      );
+      available.sort((a, b) => {
+        const rateA =
+          (assignedCounts[a] + 1) /
+          Math.max(1, availabilityCounts[a]);
+        const rateB =
+          (assignedCounts[b] + 1) /
+          Math.max(1, availabilityCounts[b]);
+        return (
+          rateA - rateB ||
+          assignedCounts[a] - assignedCounts[b] ||
+          Math.random() - 0.5
+        );
+      });
+      return available[0] || null;
+    };
+    orderedSlots.forEach(({ day, shift, candidates }) => {
+      const selected = [];
+      const usedToday = usedByDay[day];
+      if (shift === 'Tối') {
+        // Ca tối bắt buộc có một nam và một nữ.
+        const males = candidates.filter(name =>
+          MALE_STUDENTS.includes(name) &&
+          !usedToday.has(name)
+        );
+        const females = candidates.filter(name =>
+          !MALE_STUDENTS.includes(name) &&
+          !usedToday.has(name)
+        );
+        const male = chooseMember(males);
+        const female = chooseMember(females);
+        if (male && female) {
+          selected.push(male, female);
+          usedToday.add(male);
+          usedToday.add(female);
+          assignedCounts[male]++;
+          assignedCounts[female]++;
+        }
+      } else {
+        // Ca sáng và chiều: phân công tối đa số người mục tiêu.
+        for (let seat = 0; seat < target; seat++) {
+          const pool = candidates.filter(name =>
+            !usedToday.has(name)
+          );
+          const chosen = chooseMember(pool);
+          if (!chosen) break;
+          selected.push(chosen);
+          usedToday.add(chosen);
+          assignedCounts[chosen]++;
+        }
+      }
+      trialAssignments[day][shift] = selected;
+    });
+    // Tính tổng lượt phân công và tỷ lệ của từng người.
+    const totalAssigned = Object.values(
+      assignedCounts
+    ).reduce((sum, value) => sum + value, 0);
+    const rates = STUDENTS
+      .filter(name => availabilityCounts[name] > 0)
+      .map(name =>
+        assignedCounts[name] / availabilityCounts[name]
+      );
+    const spread = rates.length > 1
+      ? Math.max(...rates) - Math.min(...rates)
+      : 0;
+    const averageRate = rates.length
+      ? rates.reduce((sum, rate) => sum + rate, 0) / rates.length
+      : 0;
+    const variance = rates.length
+      ? rates.reduce(
+          (sum, rate) =>
+            sum + Math.pow(rate - averageRate, 2),
+          0
+        ) / rates.length
+      : 0;
+    // Ưu tiên số lượt phân công trước, công bằng sau.
+    const isBetter =
+      !best ||
+      totalAssigned > best.totalAssigned ||
+      (
+        totalAssigned === best.totalAssigned &&
+        spread < best.spread - 1e-10
+      ) ||
+      (
+        totalAssigned === best.totalAssigned &&
+        Math.abs(spread - best.spread) <= 1e-10 &&
+        variance < best.variance
+      );
+    if (isBetter) {
+      best = {
+        assignments: trialAssignments,
+        assignedCounts: { ...assignedCounts },
+        totalAssigned,
+        spread,
+        variance
+      };
+    }
+  }
+  // Ghi nhận phương án tốt nhất tìm được.
+  days.forEach(day => {
+    n.assignments[day] = best.assignments[day];
+  });
+  // Tính số vị trí còn thiếu.
+  let unfilled = 0;
+  slots.forEach(({ day, shift }) => {
+    const required = shift === 'Tối' ? 2 : target;
+    const actual =
+      n.assignments?.[day]?.[shift]?.length || 0;
+
+    unfilled += Math.max(0, required - actual);
+  });
+  // Tìm ca tối không đủ nguồn nam hoặc nữ.
+  const missingNightDays = slots
+    .filter(slot => {
+      if (slot.shift !== 'Tối') return false;
+      const males = slot.candidates.filter(name =>
+        MALE_STUDENTS.includes(name)
+      );
+      const females = slot.candidates.filter(name =>
+        !MALE_STUDENTS.includes(name)
+      );
+      return !males.length || !females.length;
+    })
+    .map(slot => slot.day);
+  // Hủy trạng thái công bố của tháng hiện tại.
   n.publishedMonths ??= {};
   delete n.publishedMonths[month];
   setData(n);
+  const spreadPercent = best.spread * 100;
+  const achieved = best.spread <= FAIRNESS_LIMIT + 1e-10;
   setNotice(
-    `Đã đề xuất lại lịch tháng này. Độ chênh tỷ lệ phân công là ${(spread * 100).toFixed(1)} điểm phần trăm.` +
-    (spread <= 0.100001
-      ? ' Đạt mục tiêu không quá 10%.'
-      : ' Chưa thể đạt mức 10% với các khung giờ đăng ký hiện có.') +
-    (unfilled > 0
-      ? ` Còn ${unfilled} vị trí chưa đủ người.`
-      : '') +
-    (missingMaleDays.length > 0
-      ? ` Các ca tối không có nam đăng ký: ${missingMaleDays.map((day) => day.split('-').reverse().join('/')).join(', ')}.`
-      : '')
+    `Đã đề xuất lịch sau ${MAX_TRIALS} lượt tìm kiếm. ` +
+    `Tổng cộng ${best.totalAssigned} lượt phân công. ` +
+    `Chênh lệch tỷ lệ cao nhất và thấp nhất: ${spreadPercent.toFixed(2)} điểm phần trăm.` +
+    (
+      achieved
+        ? ' Đạt giới hạn 5 điểm phần trăm.'
+        : ' Chưa tìm được phương án đạt 5 điểm phần trăm; hệ thống đã chọn phương án có chênh lệch thấp nhất trong các phương án có số lượt phân công cao nhất tìm được.'
+    ) +
+    (
+      unfilled > 0
+        ? ` Còn ${unfilled} vị trí chưa được phân công.`
+        : ' Tất cả vị trí đều đã được phân công.'
+    ) +
+    (
+      missingNightDays.length > 0
+        ? ` Các ca tối thiếu nguồn nam hoặc nữ: ${missingNightDays.map(day => day.split('-').reverse().join('/')).join(', ')}.`
+        : ''
+    )
   );
 };
   // Xuất file Excel.
@@ -749,7 +802,6 @@ n.assignments[day][shift] = selected;
             </button>
           </div>
         </section>
-
         {!(busyMode && role === 'student') && (
           <div className="stats">
             <Stat
@@ -769,7 +821,6 @@ n.assignments[day][shift] = selected;
             />
           </div>
         )}
-
         {role === 'student' ? (
           <>
             <section className="panel identity">
@@ -784,7 +835,6 @@ n.assignments[day][shift] = selected;
                   ))}
                 </select>
               </div>
-
               <button
                 type="button"
                 className={`busy-toggle ${busyMode ? 'active' : ''}`}
@@ -792,7 +842,6 @@ n.assignments[day][shift] = selected;
               >
                 {busyMode ? 'Thoát báo bận' : 'Báo bận'}
               </button>
-
               {!busyMode && (
                 <p>
                   <i className="green-dot" /> Đã chọn rảnh
@@ -800,7 +849,6 @@ n.assignments[day][shift] = selected;
                 </p>
               )}
             </section>
-
             <section className="panel official-calendar">
               <div className="panel-title">
                 <div>
@@ -816,17 +864,14 @@ n.assignments[day][shift] = selected;
                 </div>
                 <span className="tag">SÁNG · CHIỀU · TỐI</span>
               </div>
-
               {isPublished && (
                 <div className="warning">
                   Tháng này đã công bố lịch. Bạn vẫn có thể cập nhật trạng thái báo bận.
                 </div>
               )}
-
               <div className="calendar">
                 {days.map((d) => {
                   const date = new Date(d + 'T00:00:00');
-
                   return (
                     <div className="day" key={d}>
                       <div className="dayhead">
@@ -837,12 +882,10 @@ n.assignments[day][shift] = selected;
                           })}
                         </small>
                       </div>
-
                       {SHIFTS.map((sh) => {
                         const on = avail(data, d, sh).includes(student);
                         const as = assigned(data, d, sh).includes(student);
                         const busy = (data.busy?.[d]?.[sh] || []).includes(student);
-
                         return (
                           <button
                             type="button"
@@ -868,7 +911,6 @@ n.assignments[day][shift] = selected;
                   );
                 })}
               </div>
-
               {!busyMode && (
                 <div className="footnote">
                   Đã chọn{' '}
@@ -884,7 +926,6 @@ n.assignments[day][shift] = selected;
                 </div>
               )}
             </section>
-
             {!busyMode && (
               <section className="panel assigned-calendar">
                 <div className="panel-title">
@@ -893,7 +934,6 @@ n.assignments[day][shift] = selected;
                     <p>Các ca được thầy cô phân công.</p>
                   </div>
                 </div>
-
                 {myAssignments.length ? (
                   myAssignments.map((x) => (
                     <div className="assign-row" key={x.day + x.shift}>
@@ -916,7 +956,6 @@ n.assignments[day][shift] = selected;
                 <h2>Quản lý đăng ký & phân công</h2>
                 <p>Hệ thống đề xuất; thầy cô kiểm tra và quyết định cuối cùng.</p>
               </div>
-
               <div>
                 <button className="secondary" onClick={exportExcel}>
                   <Download />
@@ -928,25 +967,21 @@ n.assignments[day][shift] = selected;
                 </button>
               </div>
             </section>
-
             <section className="panel setting">
               <div>
                 <b>Số thành viên mục tiêu mỗi ca</b>
                 <small>Áp dụng cho đề xuất tự động.</small>
               </div>
-
               <select
                 value={data.target}
                 onChange={(e) => {
                   const publishedMonths = { ...data.publishedMonths };
                   delete publishedMonths[month];
-
                   setData((p) => ({
                     ...p,
                     target: Number(e.target.value),
                     publishedMonths
                   }));
-
                   setNotice(
                     'Đã thay đổi số thành viên mục tiêu. Tháng này cần kiểm tra và công bố lại.'
                   );
@@ -959,13 +994,11 @@ n.assignments[day][shift] = selected;
                 ))}
               </select>
             </section>
-
             <AdminDays
               days={days}
               data={data}
               toggleAssign={toggleAssign}
             />
-
             <section className="panel">
               <div className="panel-title">
                 <div>
@@ -973,7 +1006,6 @@ n.assignments[day][shift] = selected;
                   <p>Danh sách tổng hợp theo tháng đang xem.</p>
                 </div>
               </div>
-
               {days.some((d) =>
                 SHIFTS.some((sh) => (data.busy?.[d]?.[sh] || []).length)
               ) ? (
@@ -996,7 +1028,6 @@ n.assignments[day][shift] = selected;
                 </p>
               )}
             </section>
-
             <section className="panel">
               <div className="panel-title">
                 <div>
@@ -1004,7 +1035,6 @@ n.assignments[day][shift] = selected;
                   <p>Thêm, sửa hoặc xóa địa chỉ nhận email báo bận.</p>
                 </div>
               </div>
-
               <div style={{
                 display: 'flex',
                 gap: 8,
@@ -1021,12 +1051,10 @@ n.assignments[day][shift] = selected;
                   Thêm Gmail
                 </button>
               </div>
-
               {(data.notificationEmails || []).length ? (
                 (data.notificationEmails || []).map((email) => (
                   <div className="assign-row" key={email}>
                     <b>{email}</b>
-
                     <span style={{
                       marginLeft: 'auto',
                       display: 'flex',
@@ -1039,16 +1067,12 @@ n.assignments[day][shift] = selected;
                             'Sửa địa chỉ Gmail:',
                             email
                           );
-
                           if (next === null) return;
-
                           const value = next.trim().toLowerCase();
-
                           if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
                             setNotice('Địa chỉ email không hợp lệ.');
                             return;
                           }
-
                           setData((p) => ({
                             ...p,
                             notificationEmails: [
@@ -1063,7 +1087,6 @@ n.assignments[day][shift] = selected;
                       >
                         Sửa
                       </button>
-
                       <button
                         className="secondary"
                         onClick={() => removeNotificationEmail(email)}
@@ -1077,15 +1100,12 @@ n.assignments[day][shift] = selected;
                 <p className="empty">Chưa có Gmail nhận thông báo.</p>
               )}
             </section>
-
             <Attendance
               days={days}
               data={data}
               setData={setData}
             />
-
             <StudentStats days={days} data={data} />
-
             <section className="panel publish">
               <div>
                 <h3><ShieldCheck /> Công bố lịch trực</h3>
@@ -1095,7 +1115,6 @@ n.assignments[day][shift] = selected;
                     : 'Kiểm tra phân công trước khi công bố cho thành viên.'}
                 </p>
               </div>
-
               <div>
                 {isPublished && (
                   <button
@@ -1105,7 +1124,6 @@ n.assignments[day][shift] = selected;
                     Hủy công bố lịch
                   </button>
                 )}
-
                 <button
                   className="primary"
                   onClick={publishMonth}
@@ -1118,7 +1136,6 @@ n.assignments[day][shift] = selected;
             </section>
           </>
         )}
-
         <footer>
           ĐỘI TỰ QUẢN UEH · Đăng ký thời gian rảnh và phân công
         </footer>
@@ -1126,7 +1143,6 @@ n.assignments[day][shift] = selected;
     </div>
   );
 }
-
 function Stat({ icon, title, value }) {
   return (
     <div className="stat">
@@ -1138,23 +1154,18 @@ function Stat({ icon, title, value }) {
     </div>
   );
 }
-
 function AdminDays({ days, data, toggleAssign }) {
   const now = new Date();
   const today = `${now.getFullYear()}-${String(
     now.getMonth() + 1
   ).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
   const [day, setDay] = useState(
     () => days.includes(today) ? today : days[0]
   );
-
   const selectedDayRef = useRef(null);
-
   useEffect(() => {
     setDay(days.includes(today) ? today : days[0]);
   }, [days, today]);
-
   useEffect(() => {
     selectedDayRef.current?.scrollIntoView({
       behavior: 'smooth',
@@ -1162,7 +1173,6 @@ function AdminDays({ days, data, toggleAssign }) {
       inline: 'center'
     });
   }, [day, days]);
-
   return (
     <section className="panel">
       <div className="panel-title">
@@ -1171,7 +1181,6 @@ function AdminDays({ days, data, toggleAssign }) {
           <p>Chọn ngày, sau đó thêm/bỏ thành viên trong danh sách phân công.</p>
         </div>
       </div>
-
       <div className="day-picker">
         {days.map((d) => (
           <button
@@ -1184,23 +1193,19 @@ function AdminDays({ days, data, toggleAssign }) {
           </button>
         ))}
       </div>
-
       <div className="shift-admin">
         {SHIFTS.map((sh) => {
           const a = avail(data, day, sh);
           const picked = assigned(data, day, sh);
-
           return (
             <div className="shiftbox" key={sh}>
               <div className="shiftbox-title">
                 <b>Ca {sh}</b>
                 <span>{picked.length}/{data.target} được phân công</span>
               </div>
-
               <small className="subhead">
                 Thành viên ĐĂNG KÝ RẢNH
               </small>
-
               {a.length ? (
                 a.map((name) => (
                   <button
@@ -1219,9 +1224,7 @@ function AdminDays({ days, data, toggleAssign }) {
               ) : (
                 <p className="empty">Chưa có thành viên đăng ký.</p>
               )}
-
               <small className="subhead">ĐÃ PHÂN CÔNG</small>
-
               <div className="tags">
                 {picked.length ? (
                   picked.map((n) => (
@@ -1243,37 +1246,29 @@ function AdminDays({ days, data, toggleAssign }) {
     </section>
   );
 }
-
 function StudentStats({ days, data }) {
   const stats = STUDENTS.map((name) => {
     let assignedCount = 0;
     let availableShifts = 0;
     let availableDays = 0;
-
     days.forEach((day) => {
       let hasAvailability = false;
-
       SHIFTS.forEach((shift) => {
         const availableStudents = data.availability?.[day]?.[shift] || [];
         const assignedStudents = data.assignments?.[day]?.[shift] || [];
-
         if (availableStudents.includes(name)) {
           availableShifts += 1;
           hasAvailability = true;
         }
-
         if (assignedStudents.includes(name)) {
           assignedCount += 1;
         }
       });
-
       if (hasAvailability) availableDays += 1;
     });
-
     const percent = availableShifts > 0
       ? (assignedCount / availableShifts) * 100
       : 0;
-
     return {
       name,
       assignedCount,
@@ -1282,7 +1277,6 @@ function StudentStats({ days, data }) {
       percent
     };
   });
-
   return (
     <section className="panel" style={{ marginTop: 20 }}>
       <div className="panel-title">
@@ -1294,7 +1288,6 @@ function StudentStats({ days, data }) {
         </div>
         <span className="tag">THỐNG KÊ</span>
       </div>
-
       <div style={{
         width: '100%',
         maxHeight: 230,
@@ -1333,7 +1326,6 @@ function StudentStats({ days, data }) {
               </th>
             </tr>
           </thead>
-
           <tbody>
             {stats.map((student) => (
               <tr
@@ -1361,19 +1353,15 @@ function StudentStats({ days, data }) {
     </section>
   );
 }
-
 function Attendance({ days, data, setData }) {
   const now = new Date();
   const today = `${now.getFullYear()}-${String(
     now.getMonth() + 1
   ).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-
   const [selectedDay, setSelectedDay] = useState(
     () => days.includes(today) ? today : (days[0] || '')
   );
-
   const [selectedShift, setSelectedShift] = useState('Sáng');
-
   useEffect(() => {
     if (days.length) {
       setSelectedDay(days.includes(today) ? today : days[0]);
@@ -1381,56 +1369,43 @@ function Attendance({ days, data, setData }) {
       setSelectedDay('');
     }
   }, [days, today]);
-
   const students =
     data.assignments?.[selectedDay]?.[selectedShift] || [];
-
   const statuses = ['Có mặt', 'Vắng mặt'];
-
   const updateAttendance = (name, status) => {
     setData((previous) => {
       const next = structuredClone(previous);
       next.attendance ??= {};
       next.attendance[selectedDay] ??= {};
       next.attendance[selectedDay][selectedShift] ??= {};
-
       if (status) {
         next.attendance[selectedDay][selectedShift][name] = status;
       } else {
         delete next.attendance[selectedDay][selectedShift][name];
       }
-
       return next;
     });
   };
-
   const stats = STUDENTS.map((name) => {
     let assignedCount = 0;
     let present = 0;
     let absent = 0;
-
     days.forEach((day) => {
       SHIFTS.forEach((shift) => {
         const roster = data.assignments?.[day]?.[shift] || [];
-
         if (roster.includes(name)) {
           assignedCount += 1;
-
           const status = data.attendance?.[day]?.[shift]?.[name];
-
           if (status === 'Có mặt') present += 1;
           if (status === 'Vắng mặt') absent += 1;
         }
       });
     });
-
     const rate = assignedCount
       ? (present / assignedCount) * 100
       : 0;
-
     return { name, assignedCount, present, absent, rate };
   });
-
   return (
     <section className="panel" style={{ marginTop: 20 }}>
       <div className="panel-title">
@@ -1440,7 +1415,6 @@ function Attendance({ days, data, setData }) {
         </div>
         <span className="tag">ĐIỂM DANH</span>
       </div>
-
       <div style={{ marginBottom: 16 }}>
         <label style={{ display: 'block', marginBottom: 8 }}>
           Chọn ngày trực
@@ -1462,12 +1436,10 @@ function Attendance({ days, data, setData }) {
           ))}
         </select>
       </div>
-
       <div style={{ marginBottom: 20 }}>
         <label style={{ display: 'block', marginBottom: 8 }}>
           Chọn ca trực
         </label>
-
         <div style={{
           display: 'flex',
           gap: 8,
@@ -1487,10 +1459,8 @@ function Attendance({ days, data, setData }) {
           ))}
         </div>
       </div>
-
       <div>
         <h4>Danh sách ca {selectedShift}</h4>
-
         {students.length ? (
           students.map((name) => (
             <div
@@ -1506,7 +1476,6 @@ function Attendance({ days, data, setData }) {
               }}
             >
               <b>{name}</b>
-
               <select
                 value={
                   data.attendance?.[selectedDay]?.[selectedShift]?.[name] || ''
@@ -1535,7 +1504,6 @@ function Attendance({ days, data, setData }) {
           </div>
         )}
       </div>
-
       <div style={{
         marginTop: 28,
         padding: 18,
@@ -1544,7 +1512,6 @@ function Attendance({ days, data, setData }) {
         borderRadius: 12
       }}>
         <h3 style={{ margin: '0 0 14px' }}>Điểm danh tháng</h3>
-
         <div style={{
           width: '100%',
           maxHeight: 300,
@@ -1583,7 +1550,6 @@ function Attendance({ days, data, setData }) {
                 </th>
               </tr>
             </thead>
-
             <tbody>
               {stats.map((item) => (
                 <tr
