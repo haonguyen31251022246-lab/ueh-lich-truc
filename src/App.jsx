@@ -882,7 +882,13 @@ const suggest = () => {
                           })}
                         </small>
                       </div>
-                      {SHIFTS.map((sh) => {
+                      {SHIFTS
+                     .filter((sh) => {
+                      const isWeekend =
+                      date.getDay() === 0 || date.getDay() === 6;
+                      return !isWeekend || sh === 'Tối';
+                      })
+                       .map((sh) => {
                         const on = avail(data, d, sh).includes(student);
                         const as = assigned(data, d, sh).includes(student);
                         const busy = (data.busy?.[d]?.[sh] || []).includes(student);
