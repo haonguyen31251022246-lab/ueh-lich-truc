@@ -3,11 +3,11 @@ import * as XLSX from 'xlsx';
 import {
   CalendarDays, Users, ClipboardList, CheckCircle2,
   ChevronLeft, ChevronRight, Sparkles, Download,
-  ShieldCheck, UserRound, CalendarCheck, Send
+  ShieldCheck, UserRound, CalendarCheck, Send, LogOut
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import uehLogo from './images/UEH.jpg';
-
+import loginCover from './images/login-cover.png';
 const SHIFTS = ['Sáng', 'Chiều', 'Tối'];
 const STUDENTS = [
   'Nguyễn Xuân Quang', 'Trần Lư Vĩ Tài', 'Đoàn Thu Hằng', 'Nguyễn Thành Khánh Hưng',
@@ -71,24 +71,139 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [dataReady, setDataReady] = useState(false);
   const [role, setRole] = useState('student');
+  const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showPasswordForm, setShowPasswordForm] = useState(false);
+const [newPassword, setNewPassword] = useState('');
+const [confirmPassword, setConfirmPassword] = useState('');
+const [passwordLoading, setPasswordLoading] = useState(false);
+  const [authLoading, setAuthLoading] = useState(false);
   const [student, setStudent] = useState(STUDENTS[0]);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [notice, setNotice] = useState('');
   const [busyMode, setBusyMode] = useState(false);
   const [emailDraft, setEmailDraft] = useState('');
-
+  const [bankInfo, setBankInfo] = useState({ bank_name: '', bank_account_number: '', bank_account_holder: '' });
+  const [bankLoading, setBankLoading] = useState(false);
+  const [bankSaving, setBankSaving] = useState(false);
+  const [exportLoading, setExportLoading] = useState(false);
   const skipNextSave = useRef(false);
   const latestDataRef = useRef(data);
   latestDataRef.current = data;
-
   const days = useMemo(() => monthDays(month), [month]);
   const isPublished = !!data.publishedMonths?.[month];
+  // Đổi mật khẩu tài khoản
+const handleChangePassword = async (e) => {
+  e.preventDefault();
 
+  if (newPassword.length < 6) {
+    setNotice('Mật khẩu mới phải có ít nhất 6 ký tự.');
+    return;
+  }
+
+  if (newPassword !== confirmPassword) {
+    setNotice('Mật khẩu xác nhận không khớp.');
+    return;
+  }
+
+  setPasswordLoading(true);
+  setNotice('');
+
+  const { error } = await supabase.auth.updateUser({
+    password: newPassword
+  });
+
+  setPasswordLoading(false);
+
+  if (error) {
+    setNotice('Đổi mật khẩu thất bại: ' + error.message);
+    return;
+  }
+  setNewPassword('');
+  setConfirmPassword('');
+  setShowPasswordForm(false);
+  setNotice('Đổi mật khẩu thành công!');
+};
+  // Đăng xuất tài khoản.
+const handleLogout = async () => {
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    setNotice('Đăng xuất thất bại. Vui lòng thử lại.');
+    return;
+  }
+  setSession(null);
+  setProfile(null);
+  setLoginPassword('');
+  setRole('student');
+  setBusyMode(false);
+  setNotice('');
+};
+const handleLogin = async (e) => {
+  e.preventDefault();
+  if (!loginUsername.trim() || !loginPassword) {
+    setNotice('Vui lòng nhập tên đăng nhập và mật khẩu.');
+    return;
+  }
+  setAuthLoading(true);
+  setNotice('');
+  try {
+    const username = loginUsername.trim().toLowerCase();
+    const { data: authData, error: loginError } =
+      await supabase.auth.signInWithPassword({
+        email: `${username}@uehlichtruc.com`,
+        password: loginPassword
+      });
+    if (loginError) throw loginError;
+    const { data: userProfile, error: profileError } =
+      await supabase
+        .from('profiles')
+        .select('id, username, full_name, role, is_active')
+        .eq('id', authData.user.id)
+        .single();
+    if (profileError) throw profileError;
+    if (!userProfile.is_active) {
+      await supabase.auth.signOut();
+      throw new Error('Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.');
+    }
+    setSession(authData.session);
+    setProfile(userProfile);
+    setStudent(userProfile.full_name);
+    setRole(userProfile.role === 'admin' ? 'admin' : 'student');
+    setLoginPassword('');
+    setNotice(`Xin chào ${userProfile.full_name}!`);
+  } catch (error) {
+    console.error('Lỗi đăng nhập:', error);
+    setNotice(error.message || 'Đăng nhập thất bại.');
+  } finally {
+    setAuthLoading(false);
+  }
+};
+// Kiểm tra và khôi phục phiên đăng nhập khi mở lại ứng dụng.
+
+useEffect(() => {
+  const savedUsername = localStorage.getItem('ueh_saved_username');
+
+  if (savedUsername) {
+    setLoginUsername(savedUsername);
+  }
+
+  const checkExistingSession = async () => {
+    const { data } = await supabase.auth.getSession();
+
+    if (data.session) {
+      await supabase.auth.signOut();
+    }
+  };
+
+  checkExistingSession();
+}, []);
   // Tải dữ liệu ban đầu và đăng ký nhận thay đổi từ Supabase Realtime.
   useEffect(() => {
     let cancelled = false;
     let channel;
-
     const fetchData = async () => {
       try {
         const { data: result, error } = await supabase
@@ -189,6 +304,74 @@ export default function App() {
     setMonth(
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     );
+  };
+
+  // Tải thông tin ngân hàng của thành viên đang chọn.
+  useEffect(() => {
+    if (!session || !profile) return;
+    let cancelled = false;
+    const loadBankInfo = async () => {
+      setBankLoading(true);
+      setBankInfo({ bank_name: '', bank_account_number: '', bank_account_holder: '' });
+      try {
+        let targetUserId = profile.id;
+        if (profile.role === 'admin') {
+          const { data: targetProfile, error: targetError } = await supabase
+            .from('profiles').select('id').eq('full_name', student).maybeSingle();
+          if (targetError) throw targetError;
+          targetUserId = targetProfile?.id;
+        }
+        if (!targetUserId) return;
+        const { data: bankRow, error } = await supabase
+          .from('bank_accounts')
+          .select('bank_name, bank_account_number, bank_account_holder')
+          .eq('user_id', targetUserId)
+          .maybeSingle();
+        if (error) throw error;
+        if (!cancelled && bankRow) setBankInfo(bankRow);
+      } catch (error) {
+        console.error('Không tải được thông tin ngân hàng:', error);
+        if (!cancelled) setNotice('Không tải được thông tin ngân hàng.');
+      } finally {
+        if (!cancelled) setBankLoading(false);
+      }
+    };
+    loadBankInfo();
+    return () => { cancelled = true; };
+  }, [session, profile, student]);
+
+  const saveBankInfo = async (e) => {
+    e.preventDefault();
+    if (!bankInfo.bank_name.trim() || !bankInfo.bank_account_number.trim() || !bankInfo.bank_account_holder.trim()) {
+      setNotice('Vui lòng nhập đủ ngân hàng, số tài khoản và tên chủ tài khoản.');
+      return;
+    }
+    setBankSaving(true);
+    setNotice('');
+    try {
+      let targetUserId = profile.id;
+      if (profile.role === 'admin') {
+        const { data: targetProfile, error: targetError } = await supabase
+          .from('profiles').select('id').eq('full_name', student).maybeSingle();
+        if (targetError) throw targetError;
+        targetUserId = targetProfile?.id;
+      }
+      if (!targetUserId) throw new Error('Không tìm thấy tài khoản thành viên tương ứng.');
+      const { error } = await supabase.from('bank_accounts').upsert({
+        user_id: targetUserId,
+        bank_name: bankInfo.bank_name.trim(),
+        bank_account_number: bankInfo.bank_account_number.trim(),
+        bank_account_holder: bankInfo.bank_account_holder.trim(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id' });
+      if (error) throw error;
+      setNotice('Đã lưu thông tin tài khoản ngân hàng.');
+    } catch (error) {
+      console.error('Lưu thông tin ngân hàng thất bại:', error);
+      setNotice('Lưu thông tin ngân hàng thất bại: ' + (error.message || 'Vui lòng thử lại.'));
+    } finally {
+      setBankSaving(false);
+    }
   };
 
   // Thành viên đăng ký thời gian rảnh.
@@ -529,7 +712,27 @@ const suggest = () => {
   );
 };
   // Xuất file Excel.
-  const exportExcel = () => {
+  const exportExcel = async () => {
+    setExportLoading(true);
+    let bankByName = {};
+    try {
+      const [{ data: profilesData, error: profilesError }, { data: bankData, error: bankError }] = await Promise.all([
+        supabase.from('profiles').select('id, full_name'),
+        supabase.from('bank_accounts').select('user_id, bank_name, bank_account_number, bank_account_holder')
+      ]);
+      if (profilesError) throw profilesError;
+      if (bankError) throw bankError;
+      const nameById = Object.fromEntries((profilesData || []).map(p => [p.id, p.full_name]));
+      (bankData || []).forEach(row => {
+        const fullName = nameById[row.user_id];
+        if (fullName) bankByName[fullName] = row;
+      });
+    } catch (error) {
+      console.error('Không thể tải thông tin ngân hàng để xuất Excel:', error);
+      setNotice('Không tải được dữ liệu ngân hàng. Excel chưa được xuất; vui lòng thử lại.');
+      setExportLoading(false);
+      return;
+    }
     const workbook = XLSX.utils.book_new();
     const assignmentRows = [['Ngày', 'Ca', 'Thành viên được phân công']];
     const attendanceRows = [['Ngày', 'Ca', 'Thành viên', 'Trạng thái']];
@@ -579,7 +782,10 @@ const suggest = () => {
       'Vắng mặt',
       'Chưa điểm danh',
       'Số ca được thanh toán',
-      'Tiền phụ cấp (VNĐ)'
+      'Tiền phụ cấp (VNĐ)',
+      'Ngân hàng',
+      'Số tài khoản',
+      'Tên chủ tài khoản'
     ]];
 
     STUDENTS.forEach((name) => {
@@ -594,7 +800,10 @@ const suggest = () => {
         s.absent,
         s.unchecked,
         paidShifts,
-        paidShifts * 50000
+        paidShifts * 50000,
+        bankByName[name]?.bank_name || '',
+        bankByName[name]?.bank_account_number || '',
+        bankByName[name]?.bank_account_holder || ''
       ]);
     });
 
@@ -657,6 +866,7 @@ const suggest = () => {
     });
 
     XLSX.writeFile(workbook, `UEH-tong-hop-lich-truc-${month}.xlsx`);
+    setExportLoading(false);
   };
 
   // Danh sách ca trực của thành viên.
@@ -714,6 +924,165 @@ const suggest = () => {
     );
   }
 
+if (!session || !profile) {
+  return (
+    <>
+      <style>{`
+        .login-layout {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 60px;
+  padding: 40px 5vw;
+  box-sizing: border-box;
+  background: #f3f5f9;
+  font-family: Arial, sans-serif;
+}
+
+        .login-cover {
+  width: 45%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+        .login-cover img {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  object-fit: contain;
+  display: block;
+}
+        .login-panel {
+  width: 45%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  box-sizing: border-box;
+}
+        .login-form {
+          width: 100%;
+          max-width: 420px;
+          background: white;
+          padding: 36px;
+          border-radius: 18px;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+          box-sizing: border-box;
+        }
+
+        @media (max-width: 700px) {
+          .login-layout {
+            flex-direction: column;
+          }
+
+          .login-cover {
+            width: 100%;
+            min-height: 230px;
+            height: 230px;
+          }
+
+          .login-cover img {
+            min-height: 230px;
+            height: 230px;
+          }
+
+          .login-panel {
+            width: 100%;
+            padding: 24px 16px;
+          }
+
+          .login-form {
+            padding: 26px;
+          }
+        }
+      `}</style>
+
+      <div className="login-layout">
+        <div className="login-cover">
+          <img src={loginCover} alt="UEH Green Living Hub" />
+        </div>
+
+        <div className="login-panel">
+          <form className="login-form" onSubmit={handleLogin}>
+            <div style={{ textAlign: 'center', marginBottom: 28 }}>
+              <img
+                src={uehLogo}
+                alt="UEH Logo"
+                style={{ width: 75, height: 75, objectFit: 'contain' }}
+              />
+              <h2>ĐỘI TỰ QUẢN UEH</h2>
+              <p>Đăng nhập hệ thống lịch trực</p>
+            </div>
+
+            <label style={{ display: 'block', marginBottom: 8 }}>
+              Tên đăng nhập
+            </label>
+
+            <input
+              type="text"
+              value={loginUsername}
+              onChange={(e) => setLoginUsername(e.target.value)}
+              placeholder="Nhập tên đăng nhập"
+              autoComplete="username"
+              style={{
+                width: '100%',
+                padding: 12,
+                marginBottom: 16,
+                boxSizing: 'border-box',
+                border: '1px solid #ccc',
+                borderRadius: 8
+              }}
+            />
+
+            <label style={{ display: 'block', marginBottom: 8 }}>
+              Mật khẩu
+            </label>
+
+            <input
+              type="password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              placeholder="Nhập mật khẩu"
+              autoComplete="current-password"
+              style={{
+                width: '100%',
+                padding: 12,
+                marginBottom: 16,
+                boxSizing: 'border-box',
+                border: '1px solid #ccc',
+                borderRadius: 8
+              }}
+            />
+
+            {notice && (
+              <p style={{ color: '#c0392b', fontSize: 14 }}>
+                {notice}
+              </p>
+            )}
+
+            <button
+              type="submit"
+              disabled={authLoading}
+              style={{
+                width: '100%',
+                padding: 13,
+                border: 'none',
+                borderRadius: 8,
+                background: '#0756a5',
+                color: '#fff',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+            >
+              {authLoading ? 'Đang đăng nhập...' : 'ĐĂNG NHẬP'}
+            </button>
+          </form>
+        </div>
+      </div>
+    </>
+  );
+}
   return (
     <div className="shell">
       <aside>
@@ -739,14 +1108,15 @@ const suggest = () => {
           Thành viên
         </button>
 
-        <button
-          className={role === 'admin' ? 'nav active' : 'nav'}
-          onClick={() => setRole('admin')}
-        >
-          <ClipboardList />
-          Thầy cô
-        </button>
-
+        {profile?.role === 'admin' && (
+  <button
+    className={role === 'admin' ? 'nav active' : 'nav'}
+    onClick={() => setRole('admin')}
+  >
+    <ClipboardList />
+    Thầy cô
+  </button>
+)}
         <div className="side-note">
           <ShieldCheck />
           <span>
@@ -754,8 +1124,94 @@ const suggest = () => {
             <small>Dữ liệu dùng chung trên máy chủ.</small>
           </span>
         </div>
+        <button
+  type="button"
+  className="nav password-button"
+  onClick={() => {
+    setShowPasswordForm(!showPasswordForm);
+    setNotice('');
+  }}
+  style={{
+    width: '100%',
+    boxSizing: 'border-box',
+    marginTop: '12px',
+    marginBottom: '10px',
+    padding: '13px 12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    background: '#087d89',
+    color: '#ffffff',
+    border: '1px solid #36c5d0',
+    borderRadius: '12px',
+    boxShadow: '0 5px 12px rgba(0,0,0,0.25)',
+    fontWeight: '700',
+    cursor: 'pointer'
+  }}
+>
+  <ShieldCheck />
+  Đổi mật khẩu
+</button>
+{showPasswordForm && (
+  <form
+    onSubmit={handleChangePassword}
+    style={{
+      padding: '12px',
+      margin: '8px 0',
+      background: '#f5f7fa',
+      borderRadius: '10px'
+    }}
+  >
+    <p style={{ fontWeight: '600', marginBottom: '10px' }}>
+      Đổi mật khẩu
+    </p>
+    <input
+      type="password"
+      placeholder="Mật khẩu mới"
+      value={newPassword}
+      onChange={(e) => setNewPassword(e.target.value)}
+      required
+      style={{ width: '100%', padding: '9px', marginBottom: '8px' }}
+    />
+    <input
+      type="password"
+      placeholder="Nhập lại mật khẩu mới"
+      value={confirmPassword}
+      onChange={(e) => setConfirmPassword(e.target.value)}
+      required
+      style={{ width: '100%', padding: '9px', marginBottom: '8px' }}
+    />
+    <button type="submit" disabled={passwordLoading}>
+      {passwordLoading ? 'Đang đổi...' : 'Xác nhận đổi mật khẩu'}
+    </button>
+    <button
+      type="button"
+      onClick={() => {
+        setShowPasswordForm(false);
+        setNewPassword('');
+        setConfirmPassword('');
+        setNotice('');
+      }}
+      style={{ marginLeft: '6px' }}
+    >
+      Hủy
+    </button>
+    {notice && (
+      <p style={{ fontSize: '12px', marginTop: '8px' }}>
+        {notice}
+      </p>
+    )}
+  </form>
+)}
+<button
+  type="button"
+  className="nav logout-button"
+  onClick={handleLogout}
+>
+  <LogOut />
+  Đăng xuất
+</button>
       </aside>
-
       <main className={busyMode && role === 'student' ? 'busy-mode' : ''}>
         <header>
           <div>
@@ -766,12 +1222,10 @@ const suggest = () => {
                 : 'Tổng quan phân công'}
             </h1>
           </div>
-
           <span className={isPublished ? 'pill done' : 'pill'}>
             {isPublished ? 'Đã công bố' : 'Đang nhận đăng ký'}
           </span>
         </header>
-
         {notice && (
           <div className="notice">
             <CheckCircle2 />
@@ -779,7 +1233,6 @@ const suggest = () => {
             <button onClick={() => setNotice('')}>×</button>
           </div>
         )}
-
         <section className="monthbar">
           <div>
             <h2>{label(month)}</h2>
@@ -791,7 +1244,6 @@ const suggest = () => {
                 : 'Tổng hợp thời gian rảnh và phân công thành viên.'}
             </p>
           </div>
-
           <div className="monthnav">
             <button onClick={() => changeMonth(-1)}>
               <ChevronLeft />
@@ -827,13 +1279,22 @@ const suggest = () => {
               <div className="identity-select">
                 <label>Họ và Tên</label>
                 <select
-                  value={student}
-                  onChange={(e) => setStudent(e.target.value)}
-                >
-                  {STUDENTS.map((s) => (
-                    <option key={s}>{s}</option>
-                  ))}
-                </select>
+  value={student}
+  disabled={profile?.role !== 'admin'}
+  onChange={(e) => setStudent(e.target.value)}
+>
+  {profile?.role === 'admin' ? (
+    STUDENTS.map((name) => (
+      <option key={name} value={name}>
+        {name}
+      </option>
+    ))
+  ) : (
+    <option value={profile?.full_name || student}>
+      {profile?.full_name || student}
+    </option>
+  )}
+</select>
               </div>
               <button
                 type="button"
@@ -847,6 +1308,38 @@ const suggest = () => {
                   <i className="green-dot" /> Đã chọn rảnh
                   <i className="purple-dot" /> Được phân công
                 </p>
+              )}
+            </section>
+            <section className="panel bank-account-panel">
+              <div className="panel-title">
+                <div>
+                  <h3>Thông tin tài khoản ngân hàng</h3>
+                  <p>Thông tin này dùng để tổng hợp thanh toán phụ cấp, chỉ thành viên và quản trị viên được truy cập.</p>
+                </div>
+                <span className="tag">THANH TOÁN</span>
+              </div>
+              {bankLoading ? (
+                <p className="empty">Đang tải thông tin ngân hàng...</p>
+              ) : (
+                <form onSubmit={saveBankInfo} style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 6 }}>Ngân hàng</label>
+                    <input value={bankInfo.bank_name} onChange={(e) => setBankInfo(p => ({ ...p, bank_name: e.target.value }))} placeholder="VD: Vietcombank" required style={{ width: '100%', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 6 }}>Số tài khoản</label>
+                    <input value={bankInfo.bank_account_number} onChange={(e) => setBankInfo(p => ({ ...p, bank_account_number: e.target.value }))} placeholder="Nhập số tài khoản" inputMode="numeric" required style={{ width: '100%', boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', marginBottom: 6 }}>Tên chủ tài khoản</label>
+                    <input value={bankInfo.bank_account_holder} onChange={(e) => setBankInfo(p => ({ ...p, bank_account_holder: e.target.value }))} placeholder="Tên trên tài khoản" required style={{ width: '100%', boxSizing: 'border-box' }} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'end' }}>
+                    <button className="primary" type="submit" disabled={bankSaving} style={{ width: '100%' }}>
+                      {bankSaving ? 'Đang lưu...' : 'Lưu thông tin ngân hàng'}
+                    </button>
+                  </div>
+                </form>
               )}
             </section>
             <section className="panel official-calendar">
@@ -963,9 +1456,9 @@ const suggest = () => {
                 <p>Hệ thống đề xuất; thầy cô kiểm tra và quyết định cuối cùng.</p>
               </div>
               <div>
-                <button className="secondary" onClick={exportExcel}>
+                <button className="secondary" onClick={exportExcel} disabled={exportLoading}>
                   <Download />
-                  Xuất Files
+                  {exportLoading ? 'Đang xuất...' : 'Xuất Files'}
                 </button>
                 <button className="primary" onClick={suggest}>
                   <Sparkles />
