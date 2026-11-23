@@ -181,24 +181,57 @@ const handleLogin = async (e) => {
     setAuthLoading(false);
   }
 };
-// Kiểm tra và khôi phục phiên đăng nhập khi mở lại ứng dụng.
-
+// Khôi phục phiên đăng nhập khi mở lại ứng dụng.
 useEffect(() => {
-  const savedUsername = localStorage.getItem('ueh_saved_username');
+  let cancelled = false;
 
-  if (savedUsername) {
-    setLoginUsername(savedUsername);
-  }
+  const restoreSession = async () => {
+    setAuthLoading(true);
 
-  const checkExistingSession = async () => {
-    const { data } = await supabase.auth.getSession();
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
 
-    if (data.session) {
-      await supabase.auth.signOut();
+      if (!data.session) return;
+
+      const { data: userProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id, username, full_name, role, is_active')
+        .eq('id', data.session.user.id)
+        .single();
+
+      if (profileError) throw profileError;
+
+      if (!userProfile.is_active) {
+        await supabase.auth.signOut();
+
+        if (!cancelled) {
+          setNotice('Tài khoản đã bị khóa. Vui lòng liên hệ quản trị viên.');
+        }
+
+        return;
+      }
+
+      if (cancelled) return;
+
+      setSession(data.session);
+      setProfile(userProfile);
+      setStudent(userProfile.full_name);
+      setRole(userProfile.role === 'admin' ? 'admin' : 'student');
+      setLoginUsername(userProfile.username);
+      setNotice('');
+    } catch (error) {
+      console.error('Lỗi khôi phục đăng nhập:', error);
+    } finally {
+      if (!cancelled) setAuthLoading(false);
     }
   };
 
-  checkExistingSession();
+  restoreSession();
+
+  return () => {
+    cancelled = true;
+  };
 }, []);
   // Tải dữ liệu ban đầu và đăng ký nhận thay đổi từ Supabase Realtime.
   useEffect(() => {
