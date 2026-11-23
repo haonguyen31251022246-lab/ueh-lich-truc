@@ -4,7 +4,19 @@
 body { margin: 0; background: #f4f7fb; color: #1c2b3b; font-family: 'Be Vietnam Pro', sans-serif; font-size: 13px; }
 button, select { font: inherit; cursor: pointer; }
 .shell { min-height: 100vh; }
-aside { position: fixed; inset: 0 auto 0 0; width: 235px; background: #004b53; color: white; padding: 25px 16px; display: flex; flex-direction: column; }
+aside {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 235px;
+  height: 100vh;
+  background: #004b53;
+  color: white;
+  padding: 25px 16px;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 .brand { display: flex; gap: 11px; align-items: center; padding: 0 8px 36px; }
 .brand svg { background: #00727d; padding: 9px; border-radius: 11px; width: 42px; height: 42px; }
 .brand b, .brand small { display: block; }
@@ -19,6 +31,7 @@ aside { position: fixed; inset: 0 auto 0 0; width: 235px; background: #004b53; c
 .side-note b, .side-note small { display: block; }
 .side-note b { color: white; font-size: 11px; }
 .side-note small { font-size: 9px; margin-top: 4px; line-height: 1.5; }
+
 .logout-button {
   width: 100%;
   margin-top: 10px !important;
@@ -26,17 +39,60 @@ aside { position: fixed; inset: 0 auto 0 0; width: 235px; background: #004b53; c
   display: flex;
   align-items: center;
   gap: 10px;
-  border: none;
+
+  border: 1px solid transparent;
   border-radius: 9px;
   background: #fff1f0;
   color: #b42318 !important;
+
   cursor: pointer;
   font-size: 13px;
+  font-weight: 600;
   text-align: left;
+
+  box-shadow: 0 2px 5px rgba(180, 35, 24, 0.05);
+
+  transition:
+    background 0.25s ease,
+    color 0.25s ease,
+    transform 0.25s ease,
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
 }
+
 .logout-button svg {
   width: 18px;
   height: 18px;
+  flex-shrink: 0;
+
+  transition: transform 0.3s ease;
+}
+
+/* Khi rê chuột */
+.logout-button:hover {
+  background: linear-gradient(135deg, #ffe4e1, #ffd3cf);
+  color: #991b1b !important;
+  border-color: #ffc2bc;
+
+  transform: translateY(-3px);
+  box-shadow: 0 6px 14px rgba(180, 35, 24, 0.16);
+}
+
+/* Icon dịch chuyển */
+.logout-button:hover svg {
+  transform: translateX(4px);
+}
+
+/* Khi nhấn nút */
+.logout-button:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: 0 2px 5px rgba(180, 35, 24, 0.12);
+}
+
+/* Khi dùng bàn phím chọn nút */
+.logout-button:focus-visible {
+  outline: 2px solid #e57368;
+  outline-offset: 3px;
 }
 main { margin-left: 235px; padding: 28px 34px; max-width: 1600px; }
 header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e4eaf0; padding-bottom: 20px; }

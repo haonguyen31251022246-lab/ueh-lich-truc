@@ -82,6 +82,11 @@ const [passwordLoading, setPasswordLoading] = useState(false);
   const [authLoading, setAuthLoading] = useState(false);
   const [student, setStudent] = useState(STUDENTS[0]);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [swapDate, setSwapDate] = useState(
+  new Date().toLocaleDateString('en-CA')
+);
+const [swapShift, setSwapShift] = useState('Sáng');
+const [showAllFreeMembers, setShowAllFreeMembers] = useState(false);
   const [notice, setNotice] = useState('');
   const [busyMode, setBusyMode] = useState(false);
   const [emailDraft, setEmailDraft] = useState('');
@@ -1232,13 +1237,6 @@ if (!session || !profile) {
     Thầy cô
   </button>
 )}
-        <div className="side-note">
-          <ShieldCheck />
-          <span>
-            <b>Test</b>
-            <small>Dữ liệu dùng chung trên máy chủ.</small>
-          </span>
-        </div>
         <button
   type="button"
   className="nav password-button"
@@ -1326,6 +1324,117 @@ if (!session || !profile) {
   <LogOut />
   Đăng xuất
 </button>
+
+<section
+  className="free-member-panel"
+  style={{
+    marginTop: 16,
+    padding: 12,
+    borderRadius: 12,
+    background: 'rgba(255,255,255,0.07)',
+    color: '#fff'
+  }}
+>
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 8
+    }}
+  >
+    <Users size={18} />
+    <b>Người rảnh để đổi ca</b>
+  </div>
+
+  <p style={{ fontSize: 12, opacity: 0.8, marginBottom: 10 }}>
+    Chọn ngày để tìm người có thể đổi ca.
+  </p>
+
+  <input
+    type="date"
+    value={swapDate}
+    onChange={(e) => setSwapDate(e.target.value)}
+    style={{
+      width: '100%',
+      padding: 8,
+      borderRadius: 8,
+      border: '1px solid rgba(255,255,255,0.2)',
+      marginBottom: 12,
+      boxSizing: 'border-box'
+    }}
+  />
+<div style={{ display: 'flex', gap: 5, marginBottom: 12 }}>
+  {SHIFTS.map((shift) => (
+    <button
+      key={shift}
+      type="button"
+      onClick={() => setSwapShift(shift)}
+      style={{
+        flex: 1,
+        padding: '7px 4px',
+        borderRadius: 7,
+        border: 'none',
+        cursor: 'pointer',
+        background: swapShift === shift ? '#36b99a' : 'rgba(255,255,255,0.1)',
+        color: '#fff',
+        fontSize: 12,
+        fontWeight: swapShift === shift ? 700 : 400
+      }}
+    >
+      {shift}
+    </button>
+  ))}
+</div>
+  <div
+    style={{
+      maxHeight: 260,
+      overflowY: 'auto'
+    }}
+  >
+    
+{(() => {
+  const freeNames = avail(data, swapDate, swapShift);
+
+  return (
+    <div>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 700,
+          color: '#9ee7d4',
+          marginBottom: 8
+        }}
+      >
+        Người rảnh ca {swapShift} ({freeNames.length})
+      </div>
+
+      {freeNames.length > 0 ? (
+        freeNames.map((name) => (
+          <div
+            key={name}
+            style={{
+              fontSize: 12,
+              padding: '7px 8px',
+              marginBottom: 5,
+              background: 'rgba(255,255,255,0.06)',
+              borderRadius: 6
+            }}
+          >
+            <UserRound size={13} style={{ marginRight: 6 }} />
+            {name}
+          </div>
+        ))
+      ) : (
+        <div style={{ fontSize: 12, opacity: 0.65 }}>
+          Chưa có người đăng ký rảnh ca {swapShift} vào ngày này.
+        </div>
+      )}
+    </div>
+  );
+})()}
+  </div>
+</section>
       </aside>
       <main className={busyMode && role === 'student' ? 'busy-mode' : ''}>
         <header>
