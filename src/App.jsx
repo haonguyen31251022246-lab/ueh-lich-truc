@@ -103,10 +103,14 @@ const handleChangePassword = async (e) => {
     return;
   }
 
-  if (newPassword !== confirmPassword) {
-    setNotice('Mật khẩu xác nhận không khớp.');
-    return;
-  }
+  console.log('Độ dài mật khẩu mới:', newPassword.length);
+console.log('Độ dài xác nhận:', confirmPassword.length);
+console.log('Hai mật khẩu giống nhau:', newPassword === confirmPassword);
+
+if (newPassword !== confirmPassword) {
+  setNotice('Mật khẩu xác nhận không khớp.');
+  return;
+}
 
   setPasswordLoading(true);
   setNotice('');
@@ -237,6 +241,7 @@ useEffect(() => {
   useEffect(() => {
     let cancelled = false;
     let channel;
+    let availabilityChannel;
     const fetchData = async () => {
       try {
         const { data: result, error } = await supabase
@@ -249,21 +254,74 @@ useEffect(() => {
         if (cancelled) return;
 
         if (result?.data) {
-          skipNextSave.current = true;
-          setData({ ...initial, ...result.data });
-        } else {
-          const { error: insertError } = await supabase
-            .from('app_state')
-            .upsert({ id: 1, data: initial }, { onConflict: 'id' });
+  skipNextSave.current = true;
+  setData({ ...initial, ...result.data });
+} else {
+  const { error: insertError } = await supabase
+    .from('app_state')
+    .upsert({ id: 1, data: initial }, { onConflict: 'id' });
 
-          if (insertError) throw insertError;
+  if (insertError) throw insertError;
+  skipNextSave.current = true;
+  setData(initial);
+}
 
-          skipNextSave.current = true;
-          setData(initial);
-        }
+// Tải đăng ký rảnh từ bảng riêng
+const { data: availabilityRows, error: availabilityError } = await supabase
+  .from('availability_entries')
+  .select('day, shift, member');
 
+if (availabilityError) throw availabilityError;
+
+const availability = {};
+(availabilityRows || []).forEach((row) => {
+  availability[row.day] ??= {};
+  availability[row.day][row.shift] ??= [];
+  if (!availability[row.day][row.shift].includes(row.member)) {
+    availability[row.day][row.shift].push(row.member);
+  }
+});
+
+setData((prev) => ({
+  ...prev,
+  availability,
+}));
         setDataReady(true);
+        availabilityChannel = supabase
+  .channel('availability-entry-changes')
+  .on('postgres_changes', {
+    event: '*',
+    schema: 'public',
+    table: 'availability_entries'
+  }, (payload) => {
+    if (cancelled) return;
 
+    setData((prev) => {
+      const n = structuredClone(prev);
+      n.availability ??= {};
+
+      const row = payload.eventType === 'DELETE'
+        ? payload.old
+        : payload.new;
+
+      if (!row?.day || !row?.shift || !row?.member) return n;
+
+      n.availability[row.day] ??= {};
+      n.availability[row.day][row.shift] ??= [];
+
+      const a = n.availability[row.day][row.shift];
+
+      if (payload.eventType === 'DELETE') {
+        n.availability[row.day][row.shift] =
+          a.filter((x) => x !== row.member);
+      } else if (!a.includes(row.member)) {
+        n.availability[row.day][row.shift] = [...a, row.member];
+      }
+
+      return n;
+    });
+  })
+  .subscribe();
         channel = supabase
           .channel('app-state-changes')
           .on('postgres_changes', {
@@ -275,7 +333,11 @@ useEffect(() => {
             if (cancelled || !payload.new?.data) return;
 
             skipNextSave.current = true;
-            setData({ ...initial, ...payload.new.data });
+setData((prev) => ({
+  ...initial,
+  ...payload.new.data,
+  availability: prev.availability || {},
+}));
           })
           .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
@@ -298,9 +360,10 @@ useEffect(() => {
     fetchData();
 
     return () => {
-      cancelled = true;
-      if (channel) supabase.removeChannel(channel);
-    };
+  cancelled = true;
+  if (channel) supabase.removeChannel(channel);
+  if (availabilityChannel) supabase.removeChannel(availabilityChannel);
+};
   }, []);
 
   // Tự động lưu dữ liệu lên Supabase sau khi người dùng thay đổi.
@@ -316,9 +379,12 @@ useEffect(() => {
       const { error } = await supabase
         .from('app_state')
         .update({
-          data,
-          updated_at: new Date().toISOString()
-        })
+  data: (() => {
+    const { availability, ...otherData } = data;
+    return otherData;
+  })(),
+  updated_at: new Date().toISOString()
+})
         .eq('id', 1);
 
       if (error) {
@@ -407,28 +473,45 @@ useEffect(() => {
     }
   };
 
+  
   // Thành viên đăng ký thời gian rảnh.
-  const toggleAvail = (day, shift) => {
+  const toggleAvail = async (day, shift) => {
     if (data.publishedMonths?.[day.slice(0, 7)]) {
       setNotice('Tháng này đã công bố lịch và khóa đăng ký.');
       return;
     }
 
+    const isSelected = avail(data, day, shift).includes(student);
+
+    const query = isSelected
+      ? supabase
+          .from('availability_entries')
+            .delete()
+            .eq('day', day)
+            .eq('shift', shift)
+            .eq('member', student)
+      : supabase
+          .from('availability_entries')
+          .insert([{ day, shift, member: student }]);
+    const { error } = await query;
+    if (error) {
+      console.error('Lỗi đăng ký thời gian rảnh:', error);
+      setNotice('Lưu đăng ký thất bại. Vui lòng thử lại.');
+      return;
+    }
     setData((p) => {
       const n = structuredClone(p);
+      n.availability ??= {};
       n.availability[day] ??= {};
       const a = n.availability[day][shift] || [];
-
-      n.availability[day][shift] = a.includes(student)
+      n.availability[day][shift] = isSelected
         ? a.filter((x) => x !== student)
         : [...a, student];
 
       return n;
     });
-
     setNotice('Đã lưu lựa chọn thời gian rảnh.');
   };
-
   // Thành viên bật/tắt báo bận.
   const toggleBusy = async (day, shift) => {
     const current = data.busy?.[day]?.[shift] || [];
