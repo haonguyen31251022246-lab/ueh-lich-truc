@@ -266,13 +266,19 @@ useEffect(() => {
   setData(initial);
 }
 
-// Tải đăng ký rảnh từ bảng riêng
-const { data: availabilityRows, error: availabilityError } = await supabase
-  .from('availability_entries')
-  .select('day, shift, member');
+// Tải toàn bộ đăng ký rảnh từ bảng riêng, chia thành từng đợt
+let availabilityRows = [];
+const PAGE_SIZE = 1000;
 
-if (availabilityError) throw availabilityError;
-
+for (let from = 0; ; from += PAGE_SIZE) {
+  const { data: rows, error: availabilityError } = await supabase
+    .from('availability_entries')
+    .select('day, shift, member')
+    .range(from, from + PAGE_SIZE - 1);
+  if (availabilityError) throw availabilityError;
+  availabilityRows.push(...(rows || []));
+  if (!rows || rows.length < PAGE_SIZE) break;
+}
 const availability = {};
 (availabilityRows || []).forEach((row) => {
   availability[row.day] ??= {};
@@ -281,7 +287,6 @@ const availability = {};
     availability[row.day][row.shift].push(row.member);
   }
 });
-
 setData((prev) => ({
   ...prev,
   availability,
@@ -295,22 +300,16 @@ setData((prev) => ({
     table: 'availability_entries'
   }, (payload) => {
     if (cancelled) return;
-
     setData((prev) => {
       const n = structuredClone(prev);
       n.availability ??= {};
-
       const row = payload.eventType === 'DELETE'
         ? payload.old
         : payload.new;
-
       if (!row?.day || !row?.shift || !row?.member) return n;
-
       n.availability[row.day] ??= {};
       n.availability[row.day][row.shift] ??= [];
-
       const a = n.availability[row.day][row.shift];
-
       if (payload.eventType === 'DELETE') {
         n.availability[row.day][row.shift] =
           a.filter((x) => x !== row.member);
