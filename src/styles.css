@@ -221,3 +221,161 @@ main.busy-mode .official-calendar .panel-title p { font-weight: 600; color: #c52
   box-shadow: 0 6px 14px rgba(0, 80, 100, 0.35);
   transform: translateY(-2px);
 }
+/* ===== MENU RESPONSIVE ĐIỆN THOẠI ===== */
+
+/* Nút menu: mặc định ẩn trên máy tính */
+.mobile-menu-toggle {
+  display: none;
+}
+
+@media (max-width: 760px) {
+
+  /* Sidebar đóng */
+  aside {
+    width: 58px;
+    padding: 12px 6px;
+    gap: 4px;
+    z-index: 1000;
+    transition: width 0.25s ease;
+  }
+
+  /* Sidebar mở */
+  aside.mobile-menu-open {
+    width: 250px;
+    padding: 16px 12px;
+    box-shadow: 8px 0 25px rgba(0, 0, 0, 0.25);
+  }
+
+  /* Nút Menu */
+  .mobile-menu-toggle {
+    display: block;
+    width: 100%;
+    padding: 10px 5px;
+    margin-bottom: 12px;
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 8px;
+    background: #00636d;
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  /* Logo */
+  .brand {
+    padding: 0 2px 15px;
+    justify-content: center;
+  }
+
+  .brand div {
+    display: none;
+  }
+
+  /* Hiện thông tin thương hiệu khi menu mở */
+  aside.mobile-menu-open .brand {
+    justify-content: flex-start;
+    padding-bottom: 20px;
+  }
+
+  aside.mobile-menu-open .brand div {
+    display: block;
+  }
+
+  /* Các nhãn chức năng */
+  .side-label {
+    display: none;
+  }
+
+  aside.mobile-menu-open .side-label {
+    display: block;
+    font-size: 9px;
+  }
+
+  /* Các nút điều hướng */
+  .nav {
+    font-size: 0;
+    justify-content: center;
+    padding: 12px 3px;
+  }
+
+  .nav svg {
+    width: 19px;
+    height: 19px;
+    flex-shrink: 0;
+  }
+
+  /* Hiện tên chức năng khi mở menu */
+  aside.mobile-menu-open .nav {
+    font-size: 13px;
+    justify-content: flex-start;
+    padding: 12px;
+  }
+
+  /* Nút đổi mật khẩu */
+  aside.mobile-menu-open .password-button {
+    font-size: 13px !important;
+  }
+
+  /* Form đổi mật khẩu */
+  aside.mobile-menu-open form {
+    min-width: 0;
+  }
+
+  aside.mobile-menu-open form input {
+    max-width: 100%;
+  }
+
+  /* Bảng người rảnh */
+  .free-member-panel {
+    display: none;
+  }
+
+  aside.mobile-menu-open .free-member-panel {
+    display: block;
+  }
+
+  /* Nút đăng xuất */
+  .logout-button {
+    font-size: 0;
+    justify-content: center;
+  }
+
+  aside.mobile-menu-open .logout-button {
+    font-size: 13px;
+    justify-content: flex-start;
+  }
+
+  /* Khu vực nội dung */
+  main {
+    margin-left: 58px !important;
+    padding: 14px 10px !important;
+  }
+
+  /* Lịch */
+  .calendar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .day {
+    padding: 5px;
+  }
+
+  .shift {
+    padding: 7px 3px;
+    font-size: 9px;
+  }
+
+  /* Các khung thống kê */
+  .stats {
+    grid-template-columns: 1fr;
+  }
+
+  /* Khung phân công */
+  .shift-admin {
+    grid-template-columns: 1fr;
+  }
+
+  /* Menu mở: vẫn giữ nội dung chính ở nguyên vị trí,
+     sidebar nổi phía trên */
+}

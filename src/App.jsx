@@ -89,6 +89,7 @@ const [swapShift, setSwapShift] = useState('Sáng');
 const [showAllFreeMembers, setShowAllFreeMembers] = useState(false);
   const [notice, setNotice] = useState('');
   const [busyMode, setBusyMode] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [emailDraft, setEmailDraft] = useState('');
   const [bankInfo, setBankInfo] = useState({ bank_name: '', bank_account_number: '', bank_account_holder: '' });
   const [bankLoading, setBankLoading] = useState(false);
@@ -1205,7 +1206,14 @@ if (!session || !profile) {
 }
   return (
     <div className="shell">
-      <aside>
+      <aside className={mobileMenuOpen ? 'mobile-menu-open' : ''}>
+        <button
+  type="button"
+  className="mobile-menu-toggle"
+  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+>
+  {mobileMenuOpen ? '✕ Đóng menu' : '☰ Menu'}
+</button>
         <div className="brand">
           <img
             src={uehLogo}
