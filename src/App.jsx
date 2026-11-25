@@ -98,12 +98,13 @@ const [showAllFreeMembers, setShowAllFreeMembers] = useState(false);
   const skipNextSave = useRef(false);
   const latestDataRef = useRef(data);
   latestDataRef.current = data;
+  const lastActivityRef = useRef(Date.now());
+  const autoLogoutRef = useRef(false);
   const days = useMemo(() => monthDays(month), [month]);
   const isPublished = !!data.publishedMonths?.[month];
   // Đổi mật khẩu tài khoản
-const handleChangePassword = async (e) => {
+  const handleChangePassword = async (e) => {
   e.preventDefault();
-
   if (newPassword.length < 6) {
     setNotice('Mật khẩu mới phải có ít nhất 6 ký tự.');
     return;
@@ -151,6 +152,55 @@ const handleLogout = async () => {
   setBusyMode(false);
   setNotice('');
 };
+// Tự động đăng xuất sau 30 phút không hoạt động.
+useEffect(() => {
+  if (!session) {
+    lastActivityRef.current = Date.now();
+    autoLogoutRef.current = false;
+    return;
+  }
+
+  const IDLE_LIMIT = 30 * 60 * 1000;
+
+  const updateActivity = () => {
+    lastActivityRef.current = Date.now();
+  };
+  const activityEvents = [
+    'pointerdown',
+    'keydown',
+    'scroll',
+    'touchstart',
+    'mousemove'
+  ];
+  activityEvents.forEach(event => {
+    window.addEventListener(event, updateActivity, { passive: true });
+  });
+  const checkIdle = setInterval(async () => {
+    if (
+      !autoLogoutRef.current &&
+      Date.now() - lastActivityRef.current >= IDLE_LIMIT
+    ) {
+      autoLogoutRef.current = true;
+      const { error } = await supabase.auth.signOut();
+      setSession(null);
+      setProfile(null);
+      setLoginPassword('');
+      setRole('student');
+      setBusyMode(false);
+      setNotice(
+        error
+          ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
+          : 'Bạn đã tự động đăng xuất do không hoạt động trong 30 phút.'
+      );
+    }
+  }, 1000);
+  return () => {
+    activityEvents.forEach(event => {
+      window.removeEventListener(event, updateActivity);
+    });
+    clearInterval(checkIdle);
+  };
+}, [session]);
 const handleLogin = async (e) => {
   e.preventDefault();
   if (!loginUsername.trim() || !loginPassword) {
