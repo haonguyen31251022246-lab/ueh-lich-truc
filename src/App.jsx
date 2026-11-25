@@ -1666,13 +1666,25 @@ if (!session || !profile) {
                   </div>
                 </div>
                 {myAssignments.length ? (
-                  myAssignments.map((x) => (
-                    <div className="assign-row" key={x.day + x.shift}>
-                      <b>{fmt(x.day)}</b>
-                      <span>Ca {x.shift}</span>
-                      <em>Đã phân công</em>
-                    </div>
-                  ))
+                 myAssignments.map((x) => {
+  const coWorkers = assigned(data, x.day, x.shift)
+    .filter((name) => name !== student);
+
+  return (
+    <div className="assign-row" key={x.day + x.shift}>
+      <b>{fmt(x.day)}</b>
+      <span>Ca {x.shift}</span>
+
+      <small className="assign-coworkers">
+        Trực cùng: {coWorkers.length > 0
+          ? coWorkers.join(', ')
+          : 'Chưa có người trực cùng'}
+      </small>
+
+      <em>Đã phân công</em>
+    </div>
+  );
+})
                 ) : (
                   <div className="empty">
                     Chưa có ca trực chính thức trong tháng này.
